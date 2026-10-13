@@ -23,7 +23,7 @@ struct SettingsView: View {
                     Text("System default").tag("")
                     ForEach(microphones, id: \.uid) { Text($0.name).tag($0.uid) }
                 }
-                Text("Hold the key and speak. Add Space for hands-free, press the key again to finish. Esc cancels. Tap Shift to polish. Ctrl+Cmd+V pastes the last result.")
+                Text("Hold the key and speak, or tap it once for hands-free and press it again to finish. Esc cancels. Tap Shift to polish. Ctrl+Cmd+V pastes the last result.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -46,6 +46,7 @@ struct SettingsView: View {
 
             Section("General") {
                 Toggle("Play sounds", isOn: $settings.soundsEnabled)
+                Toggle("Mute other audio while dictating", isOn: $settings.muteWhileDictating)
                 Toggle("Open at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         do {

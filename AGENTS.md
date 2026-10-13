@@ -7,7 +7,7 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
 ## Commands
 
 - `make test`: unit tests (`HarkCore`).
-- `make verify`: end-to-end speech check without a microphone.
+- `make verify`: end-to-end speech check without a microphone, including the live path.
 - `make install`: build, sign, copy to `/Applications`, relaunch.
 - `/Applications/hark.app/Contents/MacOS/hark --doctor`: what this Mac supports.
 
@@ -29,7 +29,17 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
 
 ## Known gaps
 
-- The live hotkey and microphone path has no automated test, and as of 2026-10-13 had not
-  been run by hand either: it needs the Microphone and Accessibility grants first.
+- The live path is checked without a microphone by `make verify` (`--stream-file` feeds a
+  file through the same code). The hotkey itself and real speech are only checked by hand.
+- Apple's analyser never finishes when it was given no audio at all (a key press shorter
+  than the first microphone buffer). `AppleTranscriber.finish` returns early in that case
+  and puts a deadline on every other finalise; `make verify` covers it. Do not remove
+  either without rerunning that check.
+- Fn on its own opens the macOS emoji picker. Consuming the Fn event in the event tap,
+  at session or HID level, does not stop it (tried 2026-10-13, macOS 26.6). The keyboard
+  setting does, and `make install` sets it. The agent that opens the picker
+  (`TextInputSwitcher`) caches the setting and ignores SIGTERM, so a plain `defaults write`
+  changes nothing until it is killed with -9. A synthetic Fn press never opens the picker,
+  so this can only be checked with the physical key.
 - No fallback speech engine for Macs older than macOS 26.
 - The paste uses a fixed V key code, so non-QWERTY layouts may paste the wrong key.

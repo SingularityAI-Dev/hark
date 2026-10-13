@@ -4,6 +4,7 @@ import ApplicationServices
 import Combine
 import HarkCore
 import SwiftUI
+import os
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -13,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let transcriber: Transcriber = AppleTranscriber()
     private let indicator = IndicatorPanel()
     private let history = HistoryStore()
+    private let muter = OutputMuter()
+    /// Timings and outcomes only, never what was said. Read with:
+    /// log show --last 5m --predicate 'subsystem == "dev.hark.app"'
+    private let log = Logger(subsystem: "dev.hark.app", category: "dictation")
 
     /// Start, finish and cancel run strictly one after another, so a quick release can
     /// never reach the transcriber before its start has completed.
@@ -22,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var targetApp: String?
     private var settingsWindow: NSWindow?
     private var permissionTimer: Timer?
+    private var muteWork: DispatchWorkItem?
     private var subscriptions: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
         startHotkeysWhenTrusted()
         Task { await transcriber.prepare(locale: settings.locale) }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        unmute()
     }
 
     // MARK: Permissions
@@ -75,15 +85,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setIcon(recording: true)
             indicator.model.polish = settings.alwaysPolish
             indicator.show(.listening)
+            muteSoon()
             if settings.alwaysPolish { Refiner.prewarm(dictionary: settings.dictionary) }
             enqueue { [self] in
                 do {
                     let model = indicator.model
+                    let began = ContinuousClock.now
                     try await transcriber.start(
                         locale: settings.locale, contextualStrings: settings.dictionary,
                         inputDeviceUID: settings.inputDeviceUID.isEmpty ? nil : settings.inputDeviceUID,
                         onLevel: { level in DispatchQueue.main.async { model.level = level } })
                     recording = true
+                    log.notice("microphone on after \(Self.milliseconds(since: began)) ms")
                 } catch {
                     fail(error)
                 }
@@ -94,13 +107,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         case .finish:
             setIcon(recording: false)
+            unmute()
             indicator.show(.processing)
             let polish = settings.alwaysPolish || hotkeys.polishRequested
             enqueue { [self] in
-                guard recording else { return }
+                guard recording else {
+                    indicator.hide()
+                    return
+                }
                 recording = false
                 do {
+                    let began = ContinuousClock.now
                     let raw = try await transcriber.finish()
+                    log.notice("transcribed \(raw.count) characters in \(Self.milliseconds(since: began)) ms")
                     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                         indicator.flash("Nothing heard", seconds: 1.5)
                         return
@@ -124,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         case .cancel:
             setIcon(recording: false)
+            unmute()
             indicator.hide()
             enqueue { [self] in
                 guard recording else { return }
@@ -139,8 +159,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func fail(_ error: Error) {
         recording = false
         setIcon(recording: false)
-        NSLog("hark: %@", String(describing: error))
+        unmute()
+        log.error("dictation failed: \(String(describing: error), privacy: .public)")
         indicator.flash(error.localizedDescription)
+    }
+
+    /// Mutes other audio once the start sound has had time to play.
+    private func muteSoon() {
+        guard settings.muteWhileDictating else { return }
+        let work = DispatchWorkItem { [weak self] in self?.muter.mute() }
+        muteWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (settings.soundsEnabled ? 0.3 : 0), execute: work)
+    }
+
+    private func unmute() {
+        muteWork?.cancel()
+        muteWork = nil
+        muter.restore()
+    }
+
+    private static func milliseconds(since start: ContinuousClock.Instant) -> Int {
+        let elapsed = ContinuousClock.now - start
+        return Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     private func pasteLast() {

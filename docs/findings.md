@@ -96,14 +96,18 @@ Typeless's servers.
 | Speech | Cloud | Apple `SpeechTranscriber`, on device |
 | Cleanup | Cloud | Apple on-device language model, rule-based fallback |
 | Insertion | Clipboard paste with restore | Same approach |
+| Other audio | Muted while recording | Same, through the output device's mute control |
 | Context | Screen and surrounding text sent to cloud | App name only, kept local |
 | History | SQLite with saved audio and sync | JSON lines file, text only |
 | Dictionary | Server side | Local list, fed to the recogniser and the cleanup prompt |
 
 Not carried over: accounts, sync, translation and command modes, onboarding, telemetry,
-auto-update, audio muting, layout-aware paste key (a fixed V key code is used).
+auto-update, layout-aware paste key (a fixed V key code is used).
 
 ## Still unknown
 
 - The exact hold threshold and hands-free rules (inferred from names only).
+- How Typeless keeps `Fn` from opening the system emoji picker. Its keyboard helper has no
+  call for posting events or writing preferences, and consuming the event in a tap was
+  tried in hark and did not work. hark sets the macOS keyboard option instead.
 - The cleanup instructions, which live on the server.

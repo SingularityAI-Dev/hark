@@ -10,10 +10,20 @@ import Testing
         #expect(!machine.isRecording)
     }
 
-    @Test func accidentalTapCancels() {
+    @Test func tapTogglesHandsFree() {
+        var machine = HotkeyStateMachine()
+        #expect(machine.handle(.triggerDown, at: 0) == .start)
+        #expect(machine.handle(.triggerUp, at: 0.1) == .lock)
+        #expect(machine.isRecording)
+        #expect(machine.handle(.triggerDown, at: 5) == .finish)
+        #expect(machine.handle(.triggerUp, at: 5.1) == .none)
+        #expect(!machine.isRecording)
+    }
+
+    @Test func holdJustPastTheTapLimitFinishes() {
         var machine = HotkeyStateMachine()
         _ = machine.handle(.triggerDown, at: 0)
-        #expect(machine.handle(.triggerUp, at: 0.1) == .cancel)
+        #expect(machine.handle(.triggerUp, at: machine.tapLimit + 0.01) == .finish)
     }
 
     @Test func lockKeepsRecordingAfterRelease() {

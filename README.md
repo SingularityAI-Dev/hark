@@ -26,8 +26,10 @@ microphone icon appears in the menu bar. Then:
 2. Allow **Accessibility** when macOS asks (System Settings > Privacy & Security >
    Accessibility). The hotkey and the paste both need it. hark picks the grant up within
    two seconds, no restart needed.
-3. If you use the Fn key as the trigger: System Settings > Keyboard > "Press 🌐 key to" >
-   **Do Nothing**, so macOS does not open the emoji picker as well.
+3. Nothing to do for the Fn key: `make install` sets System Settings > Keyboard >
+   "Press 🌐 key to" to **Do Nothing**, because otherwise Fn also opens the emoji picker
+   and your words land in its search field. The picker stays on Ctrl+Cmd+Space. To undo,
+   pick another option in that same Keyboard setting.
 
 Check what this Mac supports at any time:
 
@@ -40,10 +42,13 @@ Check what this Mac supports at any time:
 | Action | Keys |
 | --- | --- |
 | Dictate | Hold **Fn**, speak, release |
-| Hands-free | While holding Fn, tap **Space**. Press Fn again to finish |
+| Hands-free | Tap **Fn** once, speak, press Fn again to finish. Space while holding Fn does the same |
 | Polish this one | Tap **Shift** while dictating |
 | Cancel | **Esc** |
 | Paste the last result again | **Ctrl+Cmd+V** |
+
+Other audio is muted while you dictate and comes back when you stop, so a video or music
+is not picked up by the microphone. Turn that off in Settings > General.
 
 The trigger key, language, microphone and personal dictionary are in the menu bar icon >
 Settings. The menu also lists the last five dictations; click one to copy it.
@@ -61,7 +66,7 @@ cleanup.
 
 ```sh
 make test      # unit tests for the hotkey logic and the cleanup rules
-make verify    # synthesises a sentence, transcribes it, compares the words
+make verify    # synthesises a sentence, transcribes it two ways, compares the words
 make app       # builds build/hark.app without installing
 ```
 
@@ -79,6 +84,12 @@ Layout:
 Data lives in `~/Library/Application Support/hark/history.jsonl` (text only) and in the
 app's preferences. Delete both to reset.
 
+When a dictation misbehaves, hark's log has the timings and outcome (never the words):
+
+```sh
+log show --last 5m --predicate 'subsystem == "dev.hark.app"'
+```
+
 ## Limits
 
 - Needs macOS 26 for Apple's on-device speech recogniser. There is no fallback engine yet;
@@ -86,3 +97,5 @@ app's preferences. Delete both to reset.
 - Languages are whatever Apple's recogniser supports (30 locales, including `en-ZA`).
 - Insertion is a paste, so apps that block pasting will not receive text.
 - Password fields: macOS hides key events there, so the hotkey does not fire.
+- Muting uses the output device's own mute control. Outputs without one (some HDMI
+  displays) are left alone; `hark --doctor` says which case applies.

@@ -2,8 +2,8 @@ import Foundation
 
 /// Turns raw trigger-key events into dictation actions.
 ///
-/// Hold the trigger to dictate until release. Press the lock key while holding to keep
-/// recording hands-free; the next trigger press ends it.
+/// Hold the trigger to dictate until release. Tap it, or press the lock key while holding,
+/// to keep recording hands-free; the next trigger press ends it.
 public struct HotkeyStateMachine {
     public enum Event: Equatable {
         case triggerDown, triggerUp
@@ -26,8 +26,8 @@ public struct HotkeyStateMachine {
     }
 
     public private(set) var state: State = .idle
-    /// A hold shorter than this is treated as an accidental tap.
-    public var minimumHold: TimeInterval = 0.25
+    /// A press shorter than this is a tap, which switches to hands-free.
+    public var tapLimit: TimeInterval = 0.35
 
     public init() {}
 
@@ -39,8 +39,12 @@ public struct HotkeyStateMachine {
             state = .holding(since: time)
             return .start
         case (.holding(let since), .triggerUp):
+            if time - since < tapLimit {
+                state = .locked
+                return .lock
+            }
             state = .idle
-            return time - since < minimumHold ? .cancel : .finish
+            return .finish
         case (.holding, .lockKeyDown):
             state = .locked
             return .lock

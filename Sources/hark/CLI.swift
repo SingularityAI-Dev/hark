@@ -11,6 +11,7 @@ enum CLI {
         hark                              run the menu bar app
         hark --doctor                     report what this Mac supports
         hark --transcribe-file <audio>    transcribe a file with the configured language
+        hark --stream-file <audio>        the same, through the path live dictation uses
         hark --refine <text>              full cleanup (rules plus on-device model)
         hark --clean <text>               rule-based cleanup only
         hark --paste <text>               paste into the focused app, then restore the clipboard
@@ -39,6 +40,17 @@ enum CLI {
                 return 0
             } catch {
                 FileHandle.standardError.write(Data("transcription failed: \(error.localizedDescription)\n".utf8))
+                return 1
+            }
+        case ("--stream-file", let path?):
+            do {
+                let text = try await AppleTranscriber.transcribeAsLive(
+                    file: URL(fileURLWithPath: path), locale: Settings.shared.locale)
+                print(text)
+                FileHandle.standardError.write(Data("streamed in \(elapsed())\n".utf8))
+                return 0
+            } catch {
+                FileHandle.standardError.write(Data("streaming failed: \(error.localizedDescription)\n".utf8))
                 return 1
             }
         case ("--refine", let text?):
@@ -71,6 +83,7 @@ enum CLI {
         print("accessibility:       \(AXIsProcessTrusted() ? "granted" : "not granted")")
         print("microphone:          \(microphoneStatus())")
         print("trigger key:         \(settings.triggerKey.label)")
+        print("mute other audio:    \(OutputMuter.isSupported ? "supported on this output" : "not supported on this output")")
     }
 
     private static func microphoneStatus() -> String {

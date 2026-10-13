@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreAudio
 import Speech
+import os
 
 /// Live speech-to-text. One implementation today (Apple, on device); the protocol is the
 /// seam for a whisper.cpp fallback on Macs without Apple's speech assets.
@@ -31,6 +32,10 @@ final class AppleTranscriber: Transcriber {
     private var analyzer: SpeechAnalyzer?
     private var input: AsyncStream<AnalyzerInput>.Continuation?
     private var results: Task<String, Error>?
+    private var microphoneRunning = false
+    /// Set once any audio has reached the analyser. Written from the audio thread.
+    private let receivedAudio = OSAllocatedUnfairLock(initialState: false)
+    private static let finishDeadline: Duration = .seconds(10)
     private var cachedFormat: (localeID: String, format: AVAudioFormat)?
 
     /// Maps a preferred locale onto one the on-device recogniser supports.
@@ -87,10 +92,12 @@ final class AppleTranscriber: Transcriber {
 
         // The microphone starts before the analyser so the first words are buffered, not lost.
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
-        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: micFormat) { buffer, _ in
+        receivedAudio.withLock { $0 = false }
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: micFormat) { [receivedAudio] buffer, _ in
             onLevel(Self.level(of: buffer))
             if let converted = Self.convert(buffer, with: converter, to: targetFormat) {
                 continuation.yield(AnalyzerInput(buffer: converted))
+                receivedAudio.withLock { $0 = true }
             }
         }
         engine.prepare()
@@ -102,6 +109,16 @@ final class AppleTranscriber: Transcriber {
             throw error
         }
 
+        microphoneRunning = true
+        try await begin(transcriber, input: stream, continuation: continuation, contextualStrings: contextualStrings)
+    }
+
+    /// Attaches the analyser to a stream of audio. The microphone and the file-fed check
+    /// both go through here, so the check exercises the code that live dictation uses.
+    private func begin(
+        _ transcriber: SpeechTranscriber, input stream: AsyncStream<AnalyzerInput>,
+        continuation: AsyncStream<AnalyzerInput>.Continuation, contextualStrings: [String]
+    ) async throws {
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         if !contextualStrings.isEmpty {
             let context = AnalysisContext()
@@ -128,9 +145,23 @@ final class AppleTranscriber: Transcriber {
     func finish() async throws -> String {
         guard let analyzer, let results else { throw TranscriberError.notRunning }
         stopMicrophone()
-        try await analyzer.finalizeAndFinishThroughEndOfInput()
         self.analyzer = nil
         self.results = nil
+        // A press too short to capture any audio leaves the analyser with nothing to
+        // finalise, and it then waits forever.
+        guard receivedAudio.withLock({ $0 }) else {
+            results.cancel()
+            await analyzer.cancelAndFinishNow()
+            return ""
+        }
+        // A finalise that never returns would block every later dictation, so it gets a deadline.
+        let watchdog = Task {
+            try await Task.sleep(for: Self.finishDeadline)
+            results.cancel()
+            await analyzer.cancelAndFinishNow()
+        }
+        defer { watchdog.cancel() }
+        try await analyzer.finalizeAndFinishThroughEndOfInput()
         return try await results.value
     }
 
@@ -143,8 +174,11 @@ final class AppleTranscriber: Transcriber {
     }
 
     private func stopMicrophone() {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        if microphoneRunning {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            microphoneRunning = false
+        }
         input?.finish()
         input = nil
     }
@@ -169,6 +203,31 @@ final class AppleTranscriber: Transcriber {
             await analyzer.cancelAndFinishNow()
         }
         return try await results.value
+    }
+
+    /// Feeds a file through the live path (audio streamed in, finished at end of input).
+    /// Used by the command-line checks to exercise dictation without a microphone.
+    static func transcribeAsLive(file url: URL, locale: Locale) async throws -> String {
+        let session = AppleTranscriber()
+        let resolved = await resolve(locale)
+        let transcriber = makeTranscriber(resolved)
+        let targetFormat = try await session.format(for: resolved, transcriber: transcriber)
+        let file = try AVAudioFile(forReading: url)
+        guard let converter = AVAudioConverter(from: file.processingFormat, to: targetFormat) else {
+            throw TranscriberError.converterUnavailable
+        }
+        let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
+        try await session.begin(transcriber, input: stream, continuation: continuation, contextualStrings: [])
+        while file.framePosition < file.length,
+            let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 4096)
+        {
+            try file.read(into: buffer)
+            if let converted = convert(buffer, with: converter, to: targetFormat) {
+                continuation.yield(AnalyzerInput(buffer: converted))
+                session.receivedAudio.withLock { $0 = true }
+            }
+        }
+        return try await session.finish()
     }
 
     private static func level(of buffer: AVAudioPCMBuffer) -> Float {

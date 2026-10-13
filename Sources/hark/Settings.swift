@@ -40,16 +40,18 @@ final class Settings: ObservableObject {
     /// Run the on-device model on every dictation, not only when Shift is added.
     @Published var alwaysPolish: Bool { didSet { defaults.set(alwaysPolish, forKey: "alwaysPolish") } }
     @Published var soundsEnabled: Bool { didSet { defaults.set(soundsEnabled, forKey: "soundsEnabled") } }
+    @Published var muteWhileDictating: Bool { didSet { defaults.set(muteWhileDictating, forKey: "muteWhileDictating") } }
     /// Empty means the system default input.
     @Published var inputDeviceUID: String { didSet { defaults.set(inputDeviceUID, forKey: "inputDeviceUID") } }
     @Published var dictionaryText: String { didSet { defaults.set(dictionaryText, forKey: "dictionaryText") } }
 
     private init() {
-        defaults.register(defaults: ["soundsEnabled": true])
+        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true])
         triggerKey = TriggerKey(rawValue: defaults.string(forKey: "triggerKey") ?? "") ?? .fn
         localeID = defaults.string(forKey: "localeID") ?? Self.defaultLocaleID()
         alwaysPolish = defaults.bool(forKey: "alwaysPolish")
         soundsEnabled = defaults.bool(forKey: "soundsEnabled")
+        muteWhileDictating = defaults.bool(forKey: "muteWhileDictating")
         inputDeviceUID = defaults.string(forKey: "inputDeviceUID") ?? ""
         dictionaryText = defaults.string(forKey: "dictionaryText") ?? ""
     }
