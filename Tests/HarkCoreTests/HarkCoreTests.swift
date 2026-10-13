@@ -64,6 +64,16 @@ import Testing
 }
 
 @Suite struct TextCleanerTests {
+    @Test func correctionsSwapWholeWordsAndKeepCapitals() {
+        let corrections = TextCleaner.corrections(from: "tasting = testing\nnot a pair\n sequel=SQL \n = nothing\n")
+        #expect(corrections == [.init(heard: "tasting", meant: "testing"), .init(heard: "sequel", meant: "SQL")])
+        #expect(
+            TextCleaner.apply(corrections, to: "Tasting, tasting hands-free. No pretasting or tastings.")
+                == "Testing, testing hands-free. No pretasting or tastings.")
+        #expect(TextCleaner.apply(corrections, to: "I use Sequel daily") == "I use SQL daily")
+        #expect(TextCleaner.apply([], to: "unchanged") == "unchanged")
+    }
+
     @Test func removesFillers() {
         #expect(TextCleaner.clean("Um, so I think, uh, we should ship it.") == "So I think, we should ship it.")
         #expect(TextCleaner.clean("hmm let me check") == "Let me check")

@@ -53,6 +53,10 @@ is not picked up by the microphone. Turn that off in Settings > General.
 The trigger key, language, microphone and personal dictionary are in the menu bar icon >
 Settings. The menu also lists the last five dictations; click one to copy it.
 
+When a word keeps coming out wrong, add it under Settings > Corrections as
+`heard = meant`, one per line (for example `tasting = testing`). It is swapped in every
+dictation, whole words only.
+
 ### Cleanup
 
 Every dictation gets instant cleanup: filler sounds ("um", "uh") and stutters are removed

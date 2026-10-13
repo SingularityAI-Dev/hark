@@ -45,7 +45,8 @@ enum CLI {
         case ("--stream-file", let path?):
             do {
                 let text = try await AppleTranscriber.transcribeAsLive(
-                    file: URL(fileURLWithPath: path), locale: Settings.shared.locale)
+                    file: URL(fileURLWithPath: path), locale: Settings.shared.locale,
+                    contextualStrings: Settings.shared.dictionary)
                 print(text)
                 FileHandle.standardError.write(Data("streamed in \(elapsed())\n".utf8))
                 return 0

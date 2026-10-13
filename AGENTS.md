@@ -29,6 +29,11 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
 
 ## Known gaps
 
+- Accent mishearings are fixed with the Corrections list, not by changing engine. Measured
+  on Rainier's voice on 2026-10-13 ("testing" heard as "tasting"): Apple en-ZA and en-GB
+  got 1 of 2, en-US and en-AU 0 of 2, whisper.cpp small.en 0 of 2 and five times slower.
+  Adding the word to the dictionary (the recogniser's contextual strings) changed nothing.
+
 - The live path is checked without a microphone by `make verify` (`--stream-file` feeds a
   file through the same code). The hotkey itself and real speech are only checked by hand.
 - Apple's analyser never finishes when it was given no audio at all (a key press shorter

@@ -42,6 +42,43 @@ public enum TextCleaner {
         return result
     }
 
+    /// A word or phrase the recogniser keeps getting wrong, and what the speaker says.
+    public struct Correction: Equatable {
+        public let heard: String
+        public let meant: String
+
+        public init(heard: String, meant: String) {
+            self.heard = heard
+            self.meant = meant
+        }
+    }
+
+    /// Reads one "heard = meant" pair per line and skips anything else.
+    public static func corrections(from text: String) -> [Correction] {
+        text.split(whereSeparator: \.isNewline).compactMap { line in
+            let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
+            return Correction(heard: parts[0], meant: parts[1])
+        }
+    }
+
+    /// Swaps whole words or phrases, matching without regard to case. A match that starts
+    /// with a capital keeps one.
+    public static func apply(_ corrections: [Correction], to text: String) -> String {
+        var result = text
+        for correction in corrections {
+            let pattern = #"(?<![\w'])"# + NSRegularExpression.escapedPattern(for: correction.heard) + #"(?![\w'])"#
+            guard let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            for match in expression.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed() {
+                guard let range = Range(match.range, in: result) else { continue }
+                let capitalised = result[range].first?.isUppercase == true
+                result.replaceSubrange(
+                    range, with: capitalised ? correction.meant.prefix(1).uppercased() + correction.meant.dropFirst() : correction.meant)
+            }
+        }
+        return result
+    }
+
     public static func wordCount(_ text: String) -> Int {
         text.split(whereSeparator: { $0.isWhitespace }).count
     }

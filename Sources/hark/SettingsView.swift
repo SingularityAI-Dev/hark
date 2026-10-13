@@ -44,6 +44,14 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section("Corrections") {
+                TextEditor(text: $settings.correctionsText)
+                    .font(.body.monospaced())
+                    .frame(height: 70)
+                Text("For words that keep being misheard. One per line, as heard = meant, for example: tasting = testing")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("General") {
                 Toggle("Play sounds", isOn: $settings.soundsEnabled)
                 Toggle("Mute other audio while dictating", isOn: $settings.muteWhileDictating)
@@ -58,7 +66,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 560)
+        .frame(width: 460, height: 690)
         .task {
             microphones = AudioDevices.inputs()
             var ids = await SpeechTranscriber.supportedLocales.map { $0.identifier(.bcp47) }.sorted()

@@ -125,7 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         return
                     }
                     let text = await Refiner.refine(
-                        raw, dictionary: settings.dictionary, useModel: polish)
+                        TextCleaner.apply(settings.corrections, to: raw),
+                        dictionary: settings.dictionary, useModel: polish)
                     guard !text.isEmpty else {
                         indicator.hide()
                         return

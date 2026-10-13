@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import HarkCore
 
 enum TriggerKey: String, CaseIterable, Identifiable {
     case fn, rightOption, rightCommand
@@ -44,6 +45,7 @@ final class Settings: ObservableObject {
     /// Empty means the system default input.
     @Published var inputDeviceUID: String { didSet { defaults.set(inputDeviceUID, forKey: "inputDeviceUID") } }
     @Published var dictionaryText: String { didSet { defaults.set(dictionaryText, forKey: "dictionaryText") } }
+    @Published var correctionsText: String { didSet { defaults.set(correctionsText, forKey: "correctionsText") } }
 
     private init() {
         defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true])
@@ -54,6 +56,7 @@ final class Settings: ObservableObject {
         muteWhileDictating = defaults.bool(forKey: "muteWhileDictating")
         inputDeviceUID = defaults.string(forKey: "inputDeviceUID") ?? ""
         dictionaryText = defaults.string(forKey: "dictionaryText") ?? ""
+        correctionsText = defaults.string(forKey: "correctionsText") ?? ""
     }
 
     var locale: Locale { Locale(identifier: localeID) }
@@ -64,6 +67,9 @@ final class Settings: ObservableObject {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
+
+    /// One "heard = meant" pair per line in the settings window.
+    var corrections: [TextCleaner.Correction] { TextCleaner.corrections(from: correctionsText) }
 
     /// The system language with the system region, so a South African Mac set to US English
     /// still gets the en-ZA recogniser.

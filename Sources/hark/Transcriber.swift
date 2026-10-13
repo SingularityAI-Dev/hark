@@ -207,7 +207,9 @@ final class AppleTranscriber: Transcriber {
 
     /// Feeds a file through the live path (audio streamed in, finished at end of input).
     /// Used by the command-line checks to exercise dictation without a microphone.
-    static func transcribeAsLive(file url: URL, locale: Locale) async throws -> String {
+    static func transcribeAsLive(
+        file url: URL, locale: Locale, contextualStrings: [String] = []
+    ) async throws -> String {
         let session = AppleTranscriber()
         let resolved = await resolve(locale)
         let transcriber = makeTranscriber(resolved)
@@ -217,7 +219,8 @@ final class AppleTranscriber: Transcriber {
             throw TranscriberError.converterUnavailable
         }
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
-        try await session.begin(transcriber, input: stream, continuation: continuation, contextualStrings: [])
+        try await session.begin(
+            transcriber, input: stream, continuation: continuation, contextualStrings: contextualStrings)
         while file.framePosition < file.length,
             let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 4096)
         {
