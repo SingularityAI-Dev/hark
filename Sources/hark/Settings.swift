@@ -46,6 +46,8 @@ final class Settings: ObservableObject {
     @Published var inputDeviceUID: String { didSet { defaults.set(inputDeviceUID, forKey: "inputDeviceUID") } }
     @Published var dictionaryText: String { didSet { defaults.set(dictionaryText, forKey: "dictionaryText") } }
     @Published var correctionsText: String { didSet { defaults.set(correctionsText, forKey: "correctionsText") } }
+    /// How many days of history to keep; 0 keeps everything.
+    @Published var keepHistoryDays: Int { didSet { defaults.set(keepHistoryDays, forKey: "keepHistoryDays") } }
 
     private init() {
         defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true])
@@ -57,6 +59,7 @@ final class Settings: ObservableObject {
         inputDeviceUID = defaults.string(forKey: "inputDeviceUID") ?? ""
         dictionaryText = defaults.string(forKey: "dictionaryText") ?? ""
         correctionsText = defaults.string(forKey: "correctionsText") ?? ""
+        keepHistoryDays = defaults.integer(forKey: "keepHistoryDays")
     }
 
     var locale: Locale { Locale(identifier: localeID) }
@@ -70,6 +73,28 @@ final class Settings: ObservableObject {
 
     /// One "heard = meant" pair per line in the settings window.
     var corrections: [TextCleaner.Correction] { TextCleaner.corrections(from: correctionsText) }
+
+    func addTerm(_ term: String) {
+        let term = term.trimmingCharacters(in: .whitespaces)
+        guard !term.isEmpty, !dictionary.contains(term) else { return }
+        dictionaryText = (dictionary + [term]).joined(separator: "\n")
+    }
+
+    func removeTerm(_ term: String) {
+        dictionaryText = dictionary.filter { $0 != term }.joined(separator: "\n")
+    }
+
+    func addCorrection(heard: String, meant: String) {
+        let heard = heard.trimmingCharacters(in: .whitespaces)
+        let meant = meant.trimmingCharacters(in: .whitespaces)
+        guard !heard.isEmpty, !meant.isEmpty else { return }
+        let others = corrections.filter { $0.heard.lowercased() != heard.lowercased() }
+        correctionsText = (others + [.init(heard: heard, meant: meant)]).map { "\($0.heard) = \($0.meant)" }.joined(separator: "\n")
+    }
+
+    func removeCorrection(_ correction: TextCleaner.Correction) {
+        correctionsText = corrections.filter { $0 != correction }.map { "\($0.heard) = \($0.meant)" }.joined(separator: "\n")
+    }
 
     /// The system language with the system region, so a South African Mac set to US English
     /// still gets the en-ZA recogniser.

@@ -13,8 +13,9 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
 
 ## Rules
 
-- Keep it light: no Electron, no web views, no bundled models. Idle footprint was 15 MB on
-  2026-10-13; treat a rise past 60 MB as a regression.
+- Keep it light: no Electron, no web views, no bundled models. Footprint on 2026-10-14:
+  14 MB at launch, about 36 MB with the hark window open, 33 MB after closing it (SwiftUI
+  stays loaded once used; flat over repeated opens). Treat a rise past 60 MB as a regression.
 - Everything stays on the Mac. No network calls, accounts, telemetry or auto-update.
 - Clean-room: nothing copied from Typeless (code, prompts, assets, helper libraries), and
   no calls to its servers. `docs/findings.md` records behaviour only.

@@ -92,6 +92,6 @@
     <text x="182" y="0" class="sub">tap for hands-free</text>
     <circle cx="370" cy="-4" r="5" fill="#e07050"/>
     <text x="382" y="0" class="sub">recording</text>
-    <text x="1040" y="0" text-anchor="end" class="sub">15 unit tests cover this machine and cleanup</text>
+    <text x="1040" y="0" text-anchor="end" class="sub">23 unit tests cover this machine, cleanup and stats</text>
   </g>
 </svg>

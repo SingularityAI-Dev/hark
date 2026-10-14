@@ -7,7 +7,7 @@ import SwiftUI
 import os
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let settings = Settings.shared
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let hotkeys = HotkeyMonitor()
@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var startedAt = Date()
     private var targetApp: String?
     private var settingsWindow: NSWindow?
+    private var dashboardWindow: NSWindow?
     private var permissionTimer: Timer?
     private var muteWork: DispatchWorkItem?
     private var subscriptions: Set<AnyCancellable> = []
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotkeys.onPasteLast = { [weak self] in self?.pasteLast() }
         hotkeys.onPolishRequested = { [weak self] in self?.indicator.model.polish = true }
         settings.$triggerKey.sink { [weak self] in self?.hotkeys.trigger = $0 }.store(in: &subscriptions)
+        settings.$keepHistoryDays.sink { [weak self] in self?.history.prune(keepingDays: $0) }.store(in: &subscriptions)
 
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
         startHotkeysWhenTrusted()
@@ -49,6 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         unmute()
+    }
+
+    /// Opening hark again from Finder or Spotlight while it runs shows the main window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openDashboard()
+        return false
     }
 
     // MARK: Permissions
@@ -106,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             indicator.show(.locked)
 
         case .finish:
+            let spoken = Date().timeIntervalSince(startedAt)
             setIcon(recording: false)
             unmute()
             indicator.show(.processing)
@@ -134,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     Inserter.paste(text)
                     history.append(.init(
                         date: Date(), raw: raw, text: text, app: targetApp,
-                        seconds: Date().timeIntervalSince(startedAt)))
+                        seconds: Date().timeIntervalSince(startedAt), spoken: spoken))
                     playSound("Pop")
                     indicator.hide()
                 } catch {
@@ -195,10 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func setIcon(recording: Bool) {
-        let image = NSImage(
-            systemSymbolName: recording ? "mic.fill" : "mic", accessibilityDescription: "hark")
-        image?.isTemplate = true
-        statusItem.button?.image = image
+        statusItem.button?.image = MenuBarIcon.image(recording: recording)
     }
 
     // MARK: Menu
@@ -210,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             menu.addItem(item("Grant Accessibility access…", #selector(openAccessibilitySettings)))
         }
+        menu.addItem(item("Open hark…", #selector(openDashboard), key: "o"))
         if AVCaptureDevice.authorizationStatus(for: .audio) == .denied {
             menu.addItem(item("Grant Microphone access…", #selector(openMicrophoneSettings)))
         }
@@ -264,6 +271,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func open(_ address: String) {
         if let url = URL(string: address) { NSWorkspace.shared.open(url) }
+    }
+
+    @objc private func openDashboard() {
+        if dashboardWindow == nil {
+            let view = DashboardView(history: history, settings: settings) { [weak self] in self?.openSettings() }
+            let hosting = NSHostingController(rootView: view)
+            hosting.sizingOptions = [.minSize]
+            let window = NSWindow(contentViewController: hosting)
+            window.title = "hark"
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.setContentSize(NSSize(width: 1100, height: 760))
+            window.center()
+            dashboardWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Drops the closed window so its views are freed and idle memory goes back down.
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === dashboardWindow else { return }
+        DispatchQueue.main.async { [weak self] in
+            window.contentViewController = nil
+            self?.dashboardWindow = nil
+        }
     }
 
     @objc private func openSettings() {

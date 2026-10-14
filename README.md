@@ -11,7 +11,7 @@ Personal tool for two people; not for distribution.
 ![Apple silicon](https://img.shields.io/badge/Apple%20silicon-required-black)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-orange)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Tests](https://img.shields.io/badge/tests-15%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%20passing-brightgreen)
 
 <p align="center">
   <img src="docs/assets/hero-pipeline.svg" alt="Animated pipeline: the Fn key starts the microphone, Apple's on-device recogniser transcribes, corrections and cleanup run, optional polish uses the on-device model, and the text is pasted at the cursor. Nothing leaves the Mac." width="100%"/>
@@ -120,6 +120,19 @@ is not picked up by the microphone. Turn that off in Settings > General.
 The trigger key, language, microphone and personal dictionary are in the menu bar icon >
 Settings. The menu also lists the last five dictations; click one to copy it.
 
+### The hark window
+
+Menu bar icon > **Open hark…** (or open hark again from Finder or Spotlight) shows a
+window with three pages, all read from the history file on this Mac:
+
+- **Home**: words dictated, time saved, speaking speed and time spent dictating over the
+  last 7 days, 30 days, 12 months or all time; active days, current and longest streak;
+  and a grid of words per day. "Time saved" compares against typing at 40 words a minute.
+- **History**: every dictation grouped by day, searchable. Right-click to copy what was
+  pasted, copy what was heard, or delete it. Choose how long history is kept.
+- **Dictionary**: the words the recogniser should expect and the corrections list, with
+  add and remove buttons.
+
 ### Corrections
 
 When a word keeps coming out wrong, add it under Settings > Corrections as
@@ -139,11 +152,12 @@ opt-in because on an M1 it takes up to 8 seconds per dictation.
 
 - In daily use since 2026-10-13. Dictation, tap-to-toggle hands-free, muting of other
   audio and the Fn key were confirmed with real speech.
-- **15 unit tests** passing (`make test`) for the hotkey state machine and cleanup rules.
+- **23 unit tests** passing (`make test`) for the hotkey state machine, cleanup rules and stats.
 - **End-to-end speech check** without a microphone (`make verify`), including the live
   streaming path and a recording with no audio in it.
-- **15 MB** footprint at launch (2026-10-13), **21 MB** after 19 hours running
-  (2026-10-14). A rise past 60 MB is treated as a regression.
+- **14 MB** footprint at launch, **21 MB** after 19 hours running, about **36 MB** while
+  the hark window is open and **33 MB** after closing it, flat over three open and close
+  cycles (2026-10-14). A rise past 60 MB is treated as a regression.
 
 ---
 
@@ -221,10 +235,10 @@ for Microphone and Accessibility again after each rebuild.
 
 Layout:
 
-- `Sources/HarkCore`: pure logic (hotkey state machine, rule-based cleanup, corrections),
-  unit tested.
+- `Sources/HarkCore`: pure logic (hotkey state machine, rule-based cleanup, corrections,
+  dictation stats and the activity grid), unit tested.
 - `Sources/hark`: the app (event tap, audio capture, Apple speech, cleanup model, paste,
-  indicator, settings, history).
+  indicator, settings, history, the hark window).
 - `docs/findings.md`: what was learned from studying Typeless and what hark does instead.
 
 **Stack:** Swift 6.2 toolchain, SwiftPM, AppKit, SwiftUI for settings and the indicator, Apple `Speech`

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import HarkCore
 
@@ -111,5 +112,82 @@ import Testing
         let reply = "Sure, the capital of France is Paris. It's about 2 hours and 15 minutes by train from London."
         #expect(!TextCleaner.isPlausibleRefinement(original: question, refined: reply))
         #expect(!TextCleaner.isPlausibleRefinement(original: "one two three four five six seven eight nine ten", refined: "Summary."))
+    }
+}
+
+@Suite struct DictationStatsTests {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Africa/Johannesburg")!
+        calendar.firstWeekday = 1
+        return calendar
+    }
+
+    /// Noon on the given day of October 2026 (the 14th is a Wednesday).
+    private func day(_ number: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 10, day: number, hour: hour))!
+    }
+
+    @Test func totalsSpeedAndTimeSaved() {
+        let stats = DictationStats(
+            records: [.init(date: day(13), words: 100, seconds: 30), .init(date: day(14), words: 50, seconds: 30)],
+            now: day(14), calendar: calendar)
+        #expect(stats.words == 150)
+        #expect(stats.dictations == 2)
+        #expect(stats.wordsPerMinute == 150)
+        // 150 words typed at 40 WPM is 225 s; speaking took 60 s.
+        #expect(stats.secondsSaved == 165)
+        #expect(stats.activeDays == 2)
+    }
+
+    @Test func emptyHistoryHasNoSpeedAndNothingSaved() {
+        let stats = DictationStats(records: [], now: day(14), calendar: calendar)
+        #expect(stats.wordsPerMinute == nil)
+        #expect(stats.secondsSaved == 0)
+        #expect(stats.currentStreak == 0)
+        #expect(stats.longestStreak == 0)
+    }
+
+    @Test func slowDictationNeverSavesNegativeTime() {
+        let stats = DictationStats(records: [.init(date: day(14), words: 5, seconds: 60)], now: day(14), calendar: calendar)
+        #expect(stats.secondsSaved == 0)
+    }
+
+    @Test func periodLimitsTotalsButNotStreaks() {
+        let records: [DictationRecord] = [1, 2, 3, 12, 13, 14].map { .init(date: day($0), words: 10, seconds: 5) }
+        let stats = DictationStats(records: records, since: day(12, hour: 0), now: day(14), calendar: calendar)
+        #expect(stats.words == 30)
+        #expect(stats.activeDays == 3)
+        #expect(stats.currentStreak == 3)
+        #expect(stats.longestStreak == 3)
+    }
+
+    @Test func streakSurvivesUntilTodaysFirstDictation() {
+        let records: [DictationRecord] = [11, 12, 13].map { .init(date: day($0), words: 1, seconds: 1) }
+        #expect(DictationStats(records: records, now: day(14, hour: 8), calendar: calendar).currentStreak == 3)
+        #expect(DictationStats(records: records, now: day(15), calendar: calendar).currentStreak == 0)
+    }
+
+    @Test func severalDictationsOnOneDayCountOnce() {
+        let records: [DictationRecord] = [8, 12, 18].map { .init(date: day(14, hour: $0), words: 1, seconds: 1) }
+        let stats = DictationStats(records: records, now: day(14), calendar: calendar)
+        #expect(stats.activeDays == 1)
+        #expect(stats.longestStreak == 1)
+        #expect(ActivityGrid.wordsByDay(records, calendar: calendar) == [calendar.startOfDay(for: day(14)): 3])
+    }
+
+    @Test func gridEndsWithTheCurrentWeekStartingOnSunday() {
+        let weeks = ActivityGrid.weeks(endingAt: day(14), count: 3, calendar: calendar)
+        #expect(weeks.count == 3)
+        #expect(weeks.allSatisfy { $0.count == 7 })
+        #expect(weeks.last?.first == calendar.startOfDay(for: day(11)))
+        #expect(weeks.first?.first == calendar.date(byAdding: .day, value: -14, to: calendar.startOfDay(for: day(11))))
+    }
+
+    @Test func levelsScaleToTheBusiestDay() {
+        #expect(ActivityGrid.level(words: 0, busiest: 100) == 0)
+        #expect(ActivityGrid.level(words: 1, busiest: 100) == 1)
+        #expect(ActivityGrid.level(words: 50, busiest: 100) == 2)
+        #expect(ActivityGrid.level(words: 100, busiest: 100) == 4)
     }
 }
