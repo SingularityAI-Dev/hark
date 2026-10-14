@@ -133,6 +133,17 @@ window with three pages, all read from the history file on this Mac:
 - **Dictionary**: the words the recogniser should expect and the corrections list, with
   add and remove buttons.
 
+<p align="center">
+  <img src="docs/assets/window-home.png" alt="hark window, Home page: words dictated, time saved, speaking speed, time dictating, streaks and a words-per-day grid." width="100%"/>
+</p>
+
+<p align="center">
+  <img src="docs/assets/window-history.png" alt="hark window, History page: retention setting, search, and dictations grouped by day with time, app and word count." width="49%"/>
+  <img src="docs/assets/window-dictionary.png" alt="hark window, Dictionary page: recogniser words and heard-to-meant corrections." width="49%"/>
+</p>
+
+<sub>Screenshots use sample data, not real dictations.</sub>
+
 ### Corrections
 
 When a word keeps coming out wrong, add it under Settings > Corrections as
