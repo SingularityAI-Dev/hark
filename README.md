@@ -13,6 +13,10 @@ Personal tool for two people; not for distribution.
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![Tests](https://img.shields.io/badge/tests-15%20passing-brightgreen)
 
+<p align="center">
+  <img src="docs/assets/hero-pipeline.svg" alt="Animated pipeline: the Fn key starts the microphone, Apple's on-device recogniser transcribes, corrections and cleanup run, optional polish uses the on-device model, and the text is pasted at the cursor. Nothing leaves the Mac." width="100%"/>
+</p>
+
 ---
 
 ## Why it exists
@@ -35,15 +39,12 @@ same hold-to-talk workflow can run entirely locally. hark is that, and nothing m
 
 ## How it works
 
-```
-Fn down
-  -> microphone on, other audio muted
-  -> Apple SpeechTranscriber, on device
-  -> Corrections list (heard = meant)
-  -> instant cleanup: fillers, stutters, sentence capitals
-  -> optional polish: Apple on-device language model, guarded
-  -> pasted at the cursor
-```
+One real dictation through each stage, using the outputs of `hark --clean` and
+`hark --refine`:
+
+<p align="center">
+  <img src="docs/assets/cleanup-stages.svg" alt="Heard: um so tasting the the build uh on Tuesday, no, Wednesday before friday. Corrections swap tasting for testing. Instant cleanup: So testing the build on Tuesday, no, Wednesday before friday. Polish, 5,049 ms: Testing the build on Wednesday before Friday." width="100%"/>
+</p>
 
 The polish step is checked before use: if the model's answer does not look like a
 cleaned-up version of what you said, hark discards it and uses the instant cleanup.
@@ -109,6 +110,10 @@ Check what this Mac supports at any time:
 | Cancel | **Esc** |
 | Paste the last result again | **Ctrl+Cmd+V** |
 
+<p align="center">
+  <img src="docs/assets/hotkey-modes.svg" alt="Hotkey state machine: Fn down starts recording; releasing after 0.35 seconds finishes; a shorter tap or Space locks hands-free mode and the next Fn press finishes; Esc cancels." width="100%"/>
+</p>
+
 Other audio is muted while you dictate and comes back when you stop, so a video or music
 is not picked up by the microphone. Turn that off in Settings > General.
 
@@ -137,14 +142,19 @@ opt-in because on an M1 it takes up to 8 seconds per dictation.
 - **15 unit tests** passing (`make test`) for the hotkey state machine and cleanup rules.
 - **End-to-end speech check** without a microphone (`make verify`), including the live
   streaming path and a recording with no audio in it.
-- **15 MB** idle footprint, measured 2026-10-13. A rise past 60 MB is treated as a
-  regression.
+- **15 MB** footprint at launch (2026-10-13), **21 MB** after 19 hours running
+  (2026-10-14). A rise past 60 MB is treated as a regression.
 
 ---
 
 ## Measured, honestly
 
-**Footprint.** hark idles at 15 MB in one process. Typeless idles at 181 MB across 7.
+**Footprint.** hark uses 21 MB in one process after 19 hours running, and its app bundle
+is 648 KB. Typeless idles at 181 MB across 7 processes and takes 529 MB on disk.
+
+<p align="center">
+  <img src="docs/assets/footprint.svg" alt="Memory: hark 21 MB in one process, Typeless 181 MB across 7. Disk: hark 648 KB, Typeless 529 MB." width="100%"/>
+</p>
 
 **Polish is slow and once misbehaved.** Apple's on-device model takes 4 to 8 seconds for
 50 words on an M1, and in testing it once answered a dictated question instead of

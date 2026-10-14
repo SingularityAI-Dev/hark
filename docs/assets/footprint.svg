@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Footprint comparison. Memory: hark 21 MB in one process after 19 hours running, Typeless 181 MB across 7 processes idle. Disk: hark 648 KB, Typeless 529 MB.">
+  <defs>
+    <style>
+      .bg { fill: #0d1117; }
+      .track { fill: #161b22; stroke: #30363d; stroke-width: 1; }
+      .title { fill: #c9d1d9; font: 600 18px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing: 0.04em; }
+      .subtitle { fill: #8b949e; font: 400 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+      .label { fill: #c9d1d9; font: 700 15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+      .value { fill: #c9d1d9; font: 700 15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+      .sub { fill: #8b949e; font: 400 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+      .tag { font: 600 10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing: 0.14em; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="400"/>
+
+  <text x="600" y="40" text-anchor="middle" class="title">SMALL ON PURPOSE</text>
+  <text x="600" y="62" text-anchor="middle" class="subtitle">no Electron · no web views · no bundled models</text>
+
+  <!-- Memory: bars scaled to 181 MB = 760 px -->
+  <text x="60" y="105" class="tag" fill="#8b949e">MEMORY · RESIDENT</text>
+
+  <text x="60" y="140" class="label">hark</text>
+  <rect class="track" x="200" y="124" width="760" height="24" rx="5"/>
+  <rect x="200" y="124" width="0" height="24" rx="5" fill="#2db88a">
+    <animate attributeName="width" values="0;88" keyTimes="0;1" dur="1.2s" fill="freeze"/>
+  </rect>
+  <text x="980" y="141" class="value">21 MB</text>
+  <text x="1060" y="141" class="sub">1 process</text>
+
+  <text x="60" y="180" class="label">Typeless</text>
+  <rect class="track" x="200" y="164" width="760" height="24" rx="5"/>
+  <rect x="200" y="164" width="0" height="24" rx="5" fill="#e07050">
+    <animate attributeName="width" values="0;760" keyTimes="0;1" dur="1.8s" fill="freeze"/>
+  </rect>
+  <text x="980" y="181" class="value">181 MB</text>
+  <text x="1060" y="181" class="sub">7 processes</text>
+
+  <!-- Disk: bars scaled to 529 MB = 760 px; hark is under a pixel, shown as a sliver -->
+  <text x="60" y="245" class="tag" fill="#8b949e">DISK · APP BUNDLE</text>
+
+  <text x="60" y="280" class="label">hark</text>
+  <rect class="track" x="200" y="264" width="760" height="24" rx="5"/>
+  <rect x="200" y="264" width="0" height="24" rx="2" fill="#2db88a">
+    <animate attributeName="width" values="0;3" keyTimes="0;1" dur="0.6s" fill="freeze"/>
+  </rect>
+  <text x="980" y="281" class="value">648 KB</text>
+
+  <text x="60" y="320" class="label">Typeless</text>
+  <rect class="track" x="200" y="304" width="760" height="24" rx="5"/>
+  <rect x="200" y="304" width="0" height="24" rx="5" fill="#e07050">
+    <animate attributeName="width" values="0;760" keyTimes="0;1" dur="1.8s" fill="freeze"/>
+  </rect>
+  <text x="980" y="321" class="value">529 MB</text>
+
+  <!-- Footer -->
+  <g transform="translate(60,375)">
+    <text x="0" y="0" class="sub">hark: footprint after 19 h running, 2026-10-14 (15 MB at launch). Typeless 2.8.1: idle, from docs/findings.md.</text>
+  </g>
+</svg>

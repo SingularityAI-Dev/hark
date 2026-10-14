@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480" role="img" aria-label="Hotkey state machine: Fn down starts recording. Releasing after 0.35 seconds finishes. A tap shorter than 0.35 seconds, or Space, locks hands-free mode, and the next Fn press finishes. Esc cancels.">
+  <defs>
+    <style>
+      .bg { fill: #0d1117; }
+      .node { fill: #161b22; stroke: #30363d; stroke-width: 1.5; }
+      .node-purple { fill: #161b22; stroke: #7c6fe0; stroke-width: 2; }
+      .node-green { fill: #161b22; stroke: #2db88a; stroke-width: 2; }
+      .title { fill: #c9d1d9; font: 600 18px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing: 0.04em; }
+      .subtitle { fill: #8b949e; font: 400 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+      .label { fill: #c9d1d9; font: 700 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing: 0.03em; }
+      .sub { fill: #8b949e; font: 400 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+      .tag { font: 600 10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing: 0.14em; }
+      .edge { font: 600 11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing: 0.06em; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="480"/>
+
+  <text x="600" y="40" text-anchor="middle" class="title">ONE KEY, TWO WAYS TO TALK</text>
+  <text x="600" y="62" text-anchor="middle" class="subtitle">HarkCore/HotkeyStateMachine · tap limit 0.35 s</text>
+
+  <!-- States -->
+  <g transform="translate(80,190)">
+    <rect class="node" width="260" height="110" rx="12"/>
+    <text x="20" y="26" class="tag" fill="#8b949e">STATE</text>
+    <text x="20" y="58" class="label">idle</text>
+    <text x="20" y="84" class="sub">waiting for fn</text>
+  </g>
+  <g transform="translate(470,190)">
+    <rect class="node-purple" width="260" height="110" rx="12"/>
+    <text x="20" y="26" class="tag" fill="#7c6fe0">STATE · RECORDING</text>
+    <text x="20" y="58" class="label">holding</text>
+    <text x="20" y="84" class="sub">talk while fn is down</text>
+    <circle cx="232" cy="28" r="6" fill="#e07050">
+      <animate attributeName="opacity" values="1;0.2;1" dur="1.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  <g transform="translate(860,190)">
+    <rect class="node-green" width="260" height="110" rx="12"/>
+    <text x="20" y="26" class="tag" fill="#2db88a">STATE · RECORDING</text>
+    <text x="20" y="58" class="label">hands-free</text>
+    <text x="20" y="84" class="sub">fn released, still listening</text>
+    <circle cx="232" cy="28" r="6" fill="#e07050">
+      <animate attributeName="opacity" values="1;0.2;1" dur="1.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Forward edges -->
+  <g fill="none" stroke-width="2">
+    <path d="M 340 245 L 470 245" stroke="#7c6fe0"/>
+    <path d="M 730 245 L 860 245" stroke="#2db88a"/>
+  </g>
+  <polygon points="470,245 460,239 460,251" fill="#7c6fe0"/>
+  <polygon points="860,245 850,239 850,251" fill="#2db88a"/>
+  <text x="405" y="232" text-anchor="middle" class="edge" fill="#7c6fe0">FN DOWN</text>
+  <text x="405" y="268" text-anchor="middle" class="sub">start</text>
+  <text x="795" y="232" text-anchor="middle" class="edge" fill="#2db88a">TAP &lt; 0.35 s</text>
+  <text x="795" y="268" text-anchor="middle" class="sub">or space · lock</text>
+
+  <!-- Hold path: release finishes -->
+  <g fill="none" stroke="#7c6fe0" stroke-width="1.8" stroke-dasharray="5 4">
+    <path d="M 600 300 C 600 380, 210 380, 210 300">
+      <animate attributeName="stroke-dashoffset" values="0;-36" dur="1.6s" repeatCount="indefinite"/>
+    </path>
+  </g>
+  <polygon points="210,300 204,310 216,310" fill="#7c6fe0"/>
+  <text x="405" y="392" text-anchor="middle" class="edge" fill="#7c6fe0">RELEASE AFTER ≥ 0.35 s · FINISH</text>
+  <text x="405" y="410" text-anchor="middle" class="sub">esc or any other key · cancel</text>
+
+  <!-- Hands-free path: next fn finishes -->
+  <g fill="none" stroke="#2db88a" stroke-width="1.8" stroke-dasharray="5 4">
+    <path d="M 990 190 C 990 100, 210 100, 210 190">
+      <animate attributeName="stroke-dashoffset" values="0;-36" dur="1.6s" repeatCount="indefinite"/>
+    </path>
+  </g>
+  <polygon points="210,190 204,180 216,180" fill="#2db88a"/>
+  <text x="600" y="150" text-anchor="middle" class="edge" fill="#2db88a">FN AGAIN · FINISH</text>
+  <text x="600" y="168" text-anchor="middle" class="sub">esc · cancel</text>
+
+  <!-- A tap travelling idle -> holding -> hands-free -> idle -->
+  <circle r="7" fill="#e07050">
+    <animateMotion dur="6s" repeatCount="indefinite" keyPoints="0;0.12;0.24;1" keyTimes="0;0.15;0.3;1" calcMode="linear"
+      path="M 340 245 L 470 245 M 730 245 L 860 245 M 990 190 C 990 100, 210 100, 210 190"/>
+    <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="6s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Footer legend -->
+  <g transform="translate(80,455)">
+    <circle cx="10" cy="-4" r="5" fill="#7c6fe0"/>
+    <text x="22" y="0" class="sub">hold to talk</text>
+    <circle cx="170" cy="-4" r="5" fill="#2db88a"/>
+    <text x="182" y="0" class="sub">tap for hands-free</text>
+    <circle cx="370" cy="-4" r="5" fill="#e07050"/>
+    <text x="382" y="0" class="sub">recording</text>
+    <text x="1040" y="0" text-anchor="end" class="sub">15 unit tests cover this machine and cleanup</text>
+  </g>
+</svg>
