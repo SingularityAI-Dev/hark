@@ -1,9 +1,69 @@
 # hark
 
-Hold a key, speak, release: your words are typed into whatever app has the cursor.
-A small macOS menu bar app. Speech recognition and cleanup both run on the Mac, so it is
-free to use and nothing leaves the machine. Personal tool for two people; not for
-distribution.
+**Hold a key, speak, release: your words are typed into whatever app has the cursor.**
+
+A small macOS menu bar app for dictation. Speech recognition and cleanup both run on the
+Mac, so it costs nothing to use and nothing leaves the machine: no account, no network
+calls, no telemetry. Native Swift with zero third-party dependencies, about 1,500 lines.
+Personal tool for two people; not for distribution.
+
+![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black)
+![Apple silicon](https://img.shields.io/badge/Apple%20silicon-required-black)
+![Swift 6.2](https://img.shields.io/badge/Swift-6.2-orange)
+![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+![Tests](https://img.shields.io/badge/tests-15%20passing-brightgreen)
+
+---
+
+## Why it exists
+
+Typeless does this job well, but it does it in the cloud. Studying its behaviour
+(`docs/findings.md`) showed three things worth avoiding:
+
+**Your words leave the Mac.** Speech, cleanup, and context from the screen and the
+surrounding text are sent to its servers.
+
+**It is heavy for what it does.** 181 MB resident across 7 processes while idle, 529 MB
+on disk.
+
+**It needs an account.** Sign-in, sync, telemetry and auto-update come with it.
+
+macOS 26 ships an on-device speech recogniser and an on-device language model, so the
+same hold-to-talk workflow can run entirely locally. hark is that, and nothing more.
+
+---
+
+## How it works
+
+```
+Fn down
+  -> microphone on, other audio muted
+  -> Apple SpeechTranscriber, on device
+  -> Corrections list (heard = meant)
+  -> instant cleanup: fillers, stutters, sentence capitals
+  -> optional polish: Apple on-device language model, guarded
+  -> pasted at the cursor
+```
+
+The polish step is checked before use: if the model's answer does not look like a
+cleaned-up version of what you said, hark discards it and uses the instant cleanup.
+
+---
+
+## When to use it, and when not to
+
+**Use hark when:**
+- You want hold-to-talk dictation in any app, with nothing sent off the Mac.
+- You have an Apple silicon Mac on macOS 26 or later.
+- A few words the recogniser keeps mishearing can be fixed with a lookup list.
+
+**It is the wrong tool when:**
+- Your Mac runs macOS 25 or earlier. There is no fallback engine.
+- You need translation, voice commands, or sync across devices. None are built.
+- You use a non-QWERTY layout. The paste sends a fixed V key code.
+- You need text in password fields or apps that block pasting.
+
+---
 
 ## Requirements
 
@@ -37,6 +97,8 @@ Check what this Mac supports at any time:
 /Applications/hark.app/Contents/MacOS/hark --doctor
 ```
 
+---
+
 ## Use
 
 | Action | Keys |
@@ -53,18 +115,87 @@ is not picked up by the microphone. Turn that off in Settings > General.
 The trigger key, language, microphone and personal dictionary are in the menu bar icon >
 Settings. The menu also lists the last five dictations; click one to copy it.
 
+### Corrections
+
 When a word keeps coming out wrong, add it under Settings > Corrections as
 `heard = meant`, one per line (for example `tasting = testing`). It is swapped in every
-dictation, whole words only.
+dictation, whole words only, before cleanup runs.
 
 ### Cleanup
 
 Every dictation gets instant cleanup: filler sounds ("um", "uh") and stutters are removed
 and sentence capitals are fixed. Polishing adds Apple's on-device language model, which
 also resolves self-corrections ("Tuesday, no, Wednesday") and repairs punctuation. It is
-opt-in because on an M1 it takes 1 to 8 seconds per dictation. If the model's answer does
-not look like a cleaned-up version of what you said, hark ignores it and uses the instant
-cleanup.
+opt-in because on an M1 it takes up to 8 seconds per dictation.
+
+---
+
+## Status
+
+- In daily use since 2026-10-13. Dictation, tap-to-toggle hands-free, muting of other
+  audio and the Fn key were confirmed with real speech.
+- **15 unit tests** passing (`make test`) for the hotkey state machine and cleanup rules.
+- **End-to-end speech check** without a microphone (`make verify`), including the live
+  streaming path and a recording with no audio in it.
+- **15 MB** idle footprint, measured 2026-10-13. A rise past 60 MB is treated as a
+  regression.
+
+---
+
+## Measured, honestly
+
+**Footprint.** hark idles at 15 MB in one process. Typeless idles at 181 MB across 7.
+
+**Polish is slow and once misbehaved.** Apple's on-device model takes 4 to 8 seconds for
+50 words on an M1, and in testing it once answered a dictated question instead of
+cleaning it up. That is why polish is opt-in per dictation and its output is checked
+before use.
+
+**Accents.** Measured on a South African voice on 2026-10-13, saying "testing" (heard as
+"tasting"):
+
+| Engine | Correct |
+| --- | --- |
+| Apple en-ZA | 1 of 2 |
+| Apple en-GB | 1 of 2 |
+| Apple en-US | 0 of 2 |
+| Apple en-AU | 0 of 2 |
+| whisper.cpp small.en | 0 of 2, about five times slower |
+
+Adding the word to the recogniser's dictionary changed nothing. Switching engine does not
+fix accent mishearings; the Corrections list does.
+
+**Not yet measured:** key-release-to-text latency, insertion into Electron apps and
+browser fields, and the microphone picker.
+
+---
+
+## Limits
+
+- Needs macOS 26 for Apple's on-device speech recogniser. There is no fallback engine yet;
+  `Transcriber` in `Sources/hark/Transcriber.swift` is the place to add one.
+- Languages are whatever Apple's recogniser supports (30 locales, including `en-ZA`).
+- Insertion is a paste, so apps that block pasting will not receive text.
+- Password fields: macOS hides key events there, so the hotkey does not fire.
+- The paste uses a fixed V key code, so non-QWERTY layouts may paste the wrong key.
+- Muting uses the output device's own mute control. Outputs without one (some HDMI
+  displays) are left alone; `hark --doctor` says which case applies.
+
+---
+
+## Roadmap
+
+**Next**
+- Confirm the second user's Mac runs macOS 26.
+- Prove `make install`'s Fn key step on a fresh Mac.
+- Measure key-release-to-text latency (median of 10) and record a demo into `docs/`.
+- Check insertion in an Electron app and a browser field; test the microphone picker.
+
+**Later**
+- A fallback speech engine for Macs older than macOS 26.
+- A layout-aware paste key.
+
+---
 
 ## Develop
 
@@ -80,10 +211,14 @@ for Microphone and Accessibility again after each rebuild.
 
 Layout:
 
-- `Sources/HarkCore`: pure logic (hotkey state machine, rule-based cleanup), unit tested.
+- `Sources/HarkCore`: pure logic (hotkey state machine, rule-based cleanup, corrections),
+  unit tested.
 - `Sources/hark`: the app (event tap, audio capture, Apple speech, cleanup model, paste,
   indicator, settings, history).
 - `docs/findings.md`: what was learned from studying Typeless and what hark does instead.
+
+**Stack:** Swift 6.2 toolchain, SwiftPM, AppKit, SwiftUI for settings and the indicator, Apple `Speech`
+(`SpeechAnalyzer`, `SpeechTranscriber`) and `FoundationModels`. No third-party packages.
 
 Data lives in `~/Library/Application Support/hark/history.jsonl` (text only) and in the
 app's preferences. Delete both to reset.
@@ -93,13 +228,3 @@ When a dictation misbehaves, hark's log has the timings and outcome (never the w
 ```sh
 log show --last 5m --predicate 'subsystem == "dev.hark.app"'
 ```
-
-## Limits
-
-- Needs macOS 26 for Apple's on-device speech recogniser. There is no fallback engine yet;
-  `Transcriber` in `Sources/hark/Transcriber.swift` is the place to add one.
-- Languages are whatever Apple's recogniser supports (30 locales, including `en-ZA`).
-- Insertion is a paste, so apps that block pasting will not receive text.
-- Password fields: macOS hides key events there, so the hotkey does not fire.
-- Muting uses the output device's own mute control. Outputs without one (some HDMI
-  displays) are left alone; `hark --doctor` says which case applies.
