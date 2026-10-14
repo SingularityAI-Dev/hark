@@ -16,14 +16,19 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
 - Keep it light: no Electron, no web views, no bundled models. Footprint on 2026-10-14:
   14 MB at launch, about 36 MB with the hark window open, 33 MB after closing it (SwiftUI
   stays loaded once used; flat over repeated opens). Treat a rise past 60 MB as a regression.
-- Everything stays on the Mac. No network calls, accounts, telemetry or auto-update.
+- Nothing leaves the Mac by default. The one exception, chosen by Rainier on 2026-10-14:
+  polish may go to an OpenAI-compatible server set in Settings (FreeLLMAPI in Docker at
+  localhost:3001, which forwards to free cloud providers). Keep it opt-in per Mac, keep the
+  key in the keychain, and keep the instant-cleanup fallback. No accounts, telemetry or
+  auto-update.
 - Clean-room: nothing copied from Typeless (code, prompts, assets, helper libraries), and
   no calls to its servers. `docs/findings.md` records behaviour only.
 - Pure logic goes in `Sources/HarkCore` with tests. Anything touching AppKit, audio, the
   event tap or Apple's models goes in `Sources/hark`.
-- The language model is opt-in ("polish"). Do not make it the default path without
-  re-measuring: 4 to 8 seconds for 50 words on an M1, and it once answered a dictated
-  question instead of cleaning it. `TextCleaner.isPlausibleRefinement` is the guard; keep
+- Polish is on by default since 2026-10-14 (Shift skips it). `make eval` is the check:
+  FreeLLMAPI `auto` 15 of 15, Apple on-device 11 of 15. Apple's model once answered a
+  dictated question instead of cleaning it. `TextCleaner.isPlausibleRefinement` is the
+  guard; keep
   its tests passing.
 - Measure before claiming: latency in milliseconds, memory with `footprint`, insertion by
   reading the target document back.

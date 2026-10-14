@@ -38,7 +38,7 @@ final class Settings: ObservableObject {
 
     @Published var triggerKey: TriggerKey { didSet { defaults.set(triggerKey.rawValue, forKey: "triggerKey") } }
     @Published var localeID: String { didSet { defaults.set(localeID, forKey: "localeID") } }
-    /// Run the on-device model on every dictation, not only when Shift is added.
+    /// Run the on-device model on every dictation; Shift does the opposite for one.
     @Published var alwaysPolish: Bool { didSet { defaults.set(alwaysPolish, forKey: "alwaysPolish") } }
     @Published var soundsEnabled: Bool { didSet { defaults.set(soundsEnabled, forKey: "soundsEnabled") } }
     @Published var muteWhileDictating: Bool { didSet { defaults.set(muteWhileDictating, forKey: "muteWhileDictating") } }
@@ -46,11 +46,15 @@ final class Settings: ObservableObject {
     @Published var inputDeviceUID: String { didSet { defaults.set(inputDeviceUID, forKey: "inputDeviceUID") } }
     @Published var dictionaryText: String { didSet { defaults.set(dictionaryText, forKey: "dictionaryText") } }
     @Published var correctionsText: String { didSet { defaults.set(correctionsText, forKey: "correctionsText") } }
+    /// OpenAI-compatible server for polish, for example FreeLLMAPI at http://localhost:3001/v1.
+    /// Empty uses Apple's on-device model. The API key is in the keychain, not here.
+    @Published var polishServerURL: String { didSet { defaults.set(polishServerURL, forKey: "polishServerURL") } }
+    @Published var polishServerModel: String { didSet { defaults.set(polishServerModel, forKey: "polishServerModel") } }
     /// How many days of history to keep; 0 keeps everything.
     @Published var keepHistoryDays: Int { didSet { defaults.set(keepHistoryDays, forKey: "keepHistoryDays") } }
 
     private init() {
-        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true])
+        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true, "alwaysPolish": true])
         triggerKey = TriggerKey(rawValue: defaults.string(forKey: "triggerKey") ?? "") ?? .fn
         localeID = defaults.string(forKey: "localeID") ?? Self.defaultLocaleID()
         alwaysPolish = defaults.bool(forKey: "alwaysPolish")
@@ -60,6 +64,8 @@ final class Settings: ObservableObject {
         dictionaryText = defaults.string(forKey: "dictionaryText") ?? ""
         correctionsText = defaults.string(forKey: "correctionsText") ?? ""
         keepHistoryDays = defaults.integer(forKey: "keepHistoryDays")
+        polishServerURL = defaults.string(forKey: "polishServerURL") ?? ""
+        polishServerModel = defaults.string(forKey: "polishServerModel") ?? "auto"
     }
 
     var locale: Locale { Locale(identifier: localeID) }

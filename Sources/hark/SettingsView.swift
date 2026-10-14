@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var locales: [String] = []
     @State private var microphones: [(uid: String, name: String)] = []
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var serverKey = Keychain.polishServerKey ?? ""
 
     var body: some View {
         Form {
@@ -23,16 +24,26 @@ struct SettingsView: View {
                     Text("System default").tag("")
                     ForEach(microphones, id: \.uid) { Text($0.name).tag($0.uid) }
                 }
-                Text("Hold the key and speak, or tap it once for hands-free and press it again to finish. Esc cancels. Tap Shift to polish. Ctrl+Cmd+V pastes the last result.")
+                Text("Hold the key and speak, or tap it once for hands-free and press it again to finish. Esc cancels. Tap Shift to switch polish the other way for one dictation. Ctrl+Cmd+V pastes the last result.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Cleanup") {
-                Toggle("Always polish with the on-device model", isOn: $settings.alwaysPolish)
+                Toggle("Polish every dictation with the on-device model", isOn: $settings.alwaysPolish)
                     .disabled(!Refiner.modelAvailable)
                 Text(Refiner.modelAvailable
-                    ? "Fillers and stutters are always removed instantly. Polishing also fixes self-corrections and punctuation but takes several seconds. Tap Shift while dictating to polish just that one."
+                    ? "Fillers and repeats are always removed instantly. Polishing also drops what you take back (\"wait, sorry, it's the other one\") and half-finished phrases, and fixes punctuation. It adds about a second, more for long dictations. Tap Shift while dictating to switch it for that one."
                     : "Apple Intelligence is off or unsupported on this Mac, so only the instant cleanup runs.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Polish server") {
+                TextField("Server URL", text: $settings.polishServerURL, prompt: Text("http://localhost:3001/v1"))
+                TextField("Model", text: $settings.polishServerModel, prompt: Text("auto"))
+                SecureField("API key", text: $serverKey)
+                    .onSubmit { Keychain.polishServerKey = serverKey }
+                    .onChange(of: serverKey) { _, key in Keychain.polishServerKey = key }
+                Text("Leave the URL empty to polish with Apple's on-device model. With a URL set, every polished dictation is sent to that server; FreeLLMAPI passes it on to free cloud providers.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -66,7 +77,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 690)
+        .frame(width: 460, height: 820)
         .task {
             microphones = AudioDevices.inputs()
             var ids = await SpeechTranscriber.supportedLocales.map { $0.identifier(.bcp47) }.sorted()

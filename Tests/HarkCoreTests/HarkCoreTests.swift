@@ -191,3 +191,52 @@ import Testing
         #expect(ActivityGrid.level(words: 100, busiest: 100) == 4)
     }
 }
+
+@Suite struct HesitationTests {
+    @Test func repeatedPhrasesCollapse() {
+        #expect(TextCleaner.clean("so I'm going to I'm going to look at it after lunch") == "So I'm going to look at it after lunch")
+        #expect(TextCleaner.clean("I think we should we should probably move it") == "I think we should probably move it")
+        #expect(TextCleaner.clean("He had had enough") == "He had had enough")
+    }
+
+    @Test func ahIsAFillerOnlyOnItsOwn() {
+        #expect(TextCleaner.clean("ah jeez it's broken") == "Jeez it's broken")
+        #expect(TextCleaner.clean("Utah is ahead, aha") == "Utah is ahead, aha")
+    }
+
+    @Test func youKnowGoesOnlyWhenItIsFiller() {
+        #expect(TextCleaner.clean("we should probably you know move the meeting") == "We should probably move the meeting")
+        #expect(TextCleaner.clean("it was, you know, fine") == "It was fine")
+        #expect(TextCleaner.clean("do you know where it is") == "Do you know where it is")
+        #expect(TextCleaner.clean("you know the answer") == "You know the answer")
+        #expect(TextCleaner.clean("if you know what I mean") == "If you know what I mean")
+    }
+
+    @Test func plausibilityAcceptsHeavySelfCorrection() {
+        let original = "So I need to go to this website wait sorry its its jeez its an email in my gmail oh no wait sorry it's a conversation in whatsapp"
+        #expect(TextCleaner.isPlausibleRefinement(original: original, refined: "I need to go to a conversation in WhatsApp."))
+        // Without anything taken back, the same shrink still looks like a summary.
+        let plain = "please book the room on the third floor for the whole team from nine until twelve on Thursday and order coffee and lunch for twelve people"
+        #expect(!TextCleaner.isPlausibleRefinement(original: plain, refined: "Book the room on Thursday."))
+    }
+}
+
+@Suite struct ChimeTests {
+    @Test func wavHeaderMatchesTheSamples() {
+        let data = Chime.wav(Chime.start)
+        let samples = Chime.samples(Chime.start)
+        #expect(data.count == 44 + samples.count * 2)
+        #expect(String(decoding: data.prefix(4), as: UTF8.self) == "RIFF")
+        #expect(samples.count == Chime.start.reduce(0) { $0 + Int($1.seconds * Double(Chime.sampleRate)) })
+    }
+
+    @Test func staysQuietAndStartsAndEndsSoftly() {
+        for notes in [Chime.start, Chime.finish] {
+            let samples = Chime.samples(notes)
+            let peak = samples.map { abs(Int($0)) }.max() ?? 0
+            #expect(peak <= Int(0.12 * Double(Int16.max)) + 1)
+            #expect(abs(Int(samples.first!)) < 100)
+            #expect(abs(Int(samples.last!)) < Int(0.12 * Double(Int16.max) * 0.05))
+        }
+    }
+}

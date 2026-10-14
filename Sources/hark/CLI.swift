@@ -58,6 +58,14 @@ enum CLI {
             print(await Refiner.refine(text, dictionary: Settings.shared.dictionary, useModel: true))
             FileHandle.standardError.write(Data("refined in \(elapsed())\n".utf8))
             return 0
+        case ("--chimes", let folder?):
+            // Writes the start and finish sounds as WAV files, to listen with afplay.
+            let directory = URL(fileURLWithPath: folder)
+            try? Chime.wav(Chime.start).write(to: directory.appendingPathComponent("hark-start.wav"))
+            try? Chime.wav(Chime.finish).write(to: directory.appendingPathComponent("hark-finish.wav"))
+            print(directory.appendingPathComponent("hark-start.wav").path)
+            print(directory.appendingPathComponent("hark-finish.wav").path)
+            return 0
         case ("--clean", let text?):
             print(TextCleaner.clean(text))
             return 0

@@ -2,19 +2,21 @@
 
 **Hold a key, speak, release: your words are typed into whatever app has the cursor.**
 
-A small macOS menu bar app for dictation. Speech recognition and cleanup both run on the
-Mac, so it costs nothing to use and nothing leaves the machine: no account, no network
-calls, no telemetry. Native Swift with zero third-party dependencies, about 1,500 lines.
-Personal tool for two people; not for distribution.
+A small macOS menu bar app for dictation. Speech recognition runs on the Mac. Cleanup
+removes hesitation, repeats and anything you take back ("wait, sorry, it's the other
+one"), using Apple's on-device model by default or, if you set one, a free LLM server such
+as [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi). No account, no telemetry,
+nothing paid for. Native Swift with zero third-party dependencies. Personal tool for two
+people; not for distribution.
 
 ![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black)
 ![Apple silicon](https://img.shields.io/badge/Apple%20silicon-required-black)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-orange)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Tests](https://img.shields.io/badge/tests-23%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-29%20passing-brightgreen)
 
 <p align="center">
-  <img src="docs/assets/hero-pipeline.svg" alt="Animated pipeline: the Fn key starts the microphone, Apple's on-device recogniser transcribes, corrections and cleanup run, optional polish uses the on-device model, and the text is pasted at the cursor. Nothing leaves the Mac." width="100%"/>
+  <img src="docs/assets/hero-pipeline.svg" alt="Animated pipeline: the Fn key starts the microphone, Apple's on-device recogniser transcribes, corrections and cleanup run, polish uses the on-device model or a chosen LLM server, and the text is pasted at the cursor. Local by default." width="100%"/>
 </p>
 
 ---
@@ -106,7 +108,7 @@ Check what this Mac supports at any time:
 | --- | --- |
 | Dictate | Hold **Fn**, speak, release |
 | Hands-free | Tap **Fn** once, speak, press Fn again to finish. Space while holding Fn does the same |
-| Polish this one | Tap **Shift** while dictating |
+| Skip polish for this one | Tap **Shift** while dictating |
 | Cancel | **Esc** |
 | Paste the last result again | **Ctrl+Cmd+V** |
 
@@ -152,10 +154,30 @@ dictation, whole words only, before cleanup runs.
 
 ### Cleanup
 
-Every dictation gets instant cleanup: filler sounds ("um", "uh") and stutters are removed
-and sentence capitals are fixed. Polishing adds Apple's on-device language model, which
-also resolves self-corrections ("Tuesday, no, Wednesday") and repairs punctuation. It is
-opt-in because on an M1 it takes up to 8 seconds per dictation.
+Every dictation gets instant cleanup with no model: filler sounds ("um", "uh", "hmm",
+"ah"), repeated words and phrases ("I'm going to I'm going to"), and "you know" used as
+filler are removed, and sentence capitals are fixed.
+
+Then polish, on by default, hands the text to a language model told to keep only what you
+meant: "so I need to go to this website, uh, wait sorry, it's an email in my gmail, oh no
+wait, sorry, it's a conversation in whatsapp" becomes "I need to go to a conversation in
+WhatsApp." Its answer is thrown away if it does not read as a cleanup of your own words.
+
+### Polish server
+
+By default polish uses Apple's on-device model, and nothing leaves the Mac. It is not
+clever enough for heavy self-correction (11 of 15 `make eval` cases). For better results,
+set an OpenAI-compatible server under Settings > Polish server. With
+[FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) running in Docker:
+
+- URL `http://localhost:3001/v1`, model `auto`, and the unified API key from its Keys page
+  (stored in the macOS keychain).
+- At least one free provider key added in FreeLLMAPI, for example Groq.
+
+**With a server set, every polished dictation is sent to it, and FreeLLMAPI forwards it to
+whichever free cloud provider its router picks.** Free tiers may keep or train on what
+they receive. If the server fails or takes over 10 seconds, hark pastes the instant
+cleanup instead. Leave the URL empty to keep everything on the Mac.
 
 ---
 
@@ -163,7 +185,11 @@ opt-in because on an M1 it takes up to 8 seconds per dictation.
 
 - In daily use since 2026-10-13. Dictation, tap-to-toggle hands-free, muting of other
   audio and the Fn key were confirmed with real speech.
-- **23 unit tests** passing (`make test`) for the hotkey state machine, cleanup rules and stats.
+- **29 unit tests** passing (`make test`) for the hotkey state machine, cleanup rules,
+  stats and sounds.
+- **Polish eval** (`make eval`): 15 hesitant or self-correcting sentences. Through
+  FreeLLMAPI `auto`: 15 of 15, median 0.47 s, slowest 9 s. Apple's on-device model: 11
+  of 15 (2026-10-14).
 - **End-to-end speech check** without a microphone (`make verify`), including the live
   streaming path and a recording with no audio in it.
 - **14 MB** footprint at launch, **21 MB** after 19 hours running, about **36 MB** while
@@ -181,10 +207,17 @@ is 648 KB. Typeless idles at 181 MB across 7 processes and takes 529 MB on disk.
   <img src="docs/assets/footprint.svg" alt="Memory: hark 21 MB in one process, Typeless 181 MB across 7. Disk: hark 648 KB, Typeless 529 MB." width="100%"/>
 </p>
 
-**Polish is slow and once misbehaved.** Apple's on-device model takes 4 to 8 seconds for
-50 words on an M1, and in testing it once answered a dictated question instead of
-cleaning it up. That is why polish is opt-in per dictation and its output is checked
-before use.
+**Polish.** Measured with `make eval` on 2026-10-14:
+
+| Engine | Passed | Time |
+| --- | --- | --- |
+| FreeLLMAPI, model `auto` | 15 of 15 | median 0.47 s, slowest 9 s |
+| Apple on-device model | 11 of 15 | 0.7 to 0.9 s warm, 4 to 10 s for long or cold |
+| FreeLLMAPI, a single pinned model | 7 to 11 of 15 | pinned models were rate-limited, missing or timed out |
+
+Pin nothing: `auto` moves to the next free model when one is rate-limited. Apple's model
+once answered a dictated question instead of cleaning it, which is why every polish
+answer is checked before use.
 
 **Accents.** Measured on a South African voice on 2026-10-13, saying "testing" (heard as
 "tasting"):
@@ -237,6 +270,7 @@ browser fields, and the microphone picker.
 ```sh
 make test      # unit tests for the hotkey logic and the cleanup rules
 make verify    # synthesises a sentence, transcribes it two ways, compares the words
+make eval      # 15 hesitant sentences through polish; set HARK_POLISH_URL/MODEL/KEY to test a server
 make app       # builds build/hark.app without installing
 ```
 

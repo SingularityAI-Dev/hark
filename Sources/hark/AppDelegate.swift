@@ -40,7 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         hotkeys.trigger = settings.triggerKey
         hotkeys.onAction = { [weak self] action in self?.handle(action) }
         hotkeys.onPasteLast = { [weak self] in self?.pasteLast() }
-        hotkeys.onPolishRequested = { [weak self] in self?.indicator.model.polish = true }
+        hotkeys.onPolishRequested = { [weak self] in
+            guard let self else { return }
+            indicator.model.polish = !settings.alwaysPolish
+        }
         settings.$triggerKey.sink { [weak self] in self?.hotkeys.trigger = $0 }.store(in: &subscriptions)
         settings.$keepHistoryDays.sink { [weak self] in self?.history.prune(keepingDays: $0) }.store(in: &subscriptions)
 
@@ -89,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         case .start:
             targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
             startedAt = Date()
-            playSound("Tink")
+            play(startSound)
             setIcon(recording: true)
             indicator.model.polish = settings.alwaysPolish
             indicator.show(.listening)
@@ -118,7 +121,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             setIcon(recording: false)
             unmute()
             indicator.show(.processing)
-            let polish = settings.alwaysPolish || hotkeys.polishRequested
+            // Shift flips the setting for this one dictation.
+            let polish = settings.alwaysPolish != hotkeys.polishRequested
             enqueue { [self] in
                 guard recording else {
                     indicator.hide()
@@ -144,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     history.append(.init(
                         date: Date(), raw: raw, text: text, app: targetApp,
                         seconds: Date().timeIntervalSince(startedAt), spoken: spoken))
-                    playSound("Pop")
+                    play(finishSound)
                     indicator.hide()
                 } catch {
                     fail(error)
@@ -198,9 +202,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         Inserter.paste(entry.text)
     }
 
-    private func playSound(_ name: String) {
-        guard settings.soundsEnabled else { return }
-        NSSound(named: name)?.play()
+    private let startSound = NSSound(data: Chime.wav(Chime.start))
+    private let finishSound = NSSound(data: Chime.wav(Chime.finish))
+
+    private func play(_ sound: NSSound?) {
+        guard settings.soundsEnabled, let sound else { return }
+        sound.stop()
+        sound.play()
     }
 
     private func setIcon(recording: Bool) {

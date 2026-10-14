@@ -170,7 +170,7 @@ private struct HomePage: View {
 
                 VStack(spacing: 16) {
                     ShortcutsCard(trigger: settings.triggerKey)
-                    PrivacyCard(dictations: history.entries.count)
+                    PrivacyCard(dictations: history.entries.count, server: URL(string: settings.polishServerURL)?.host())
                 }
                 .frame(width: 250)
             }
@@ -302,7 +302,7 @@ private struct ShortcutsCard: View {
         VStack(alignment: .leading, spacing: 14) {
             row("Dictate", keys: [key], hint: "hold")
             row("Hands-free", keys: [key], hint: "tap, then again to finish")
-            row("Polish this one", keys: ["Shift"], hint: "while dictating")
+            row("Skip polish for this one", keys: ["Shift"], hint: "while dictating")
             row("Cancel", keys: ["Esc"])
             row("Paste last again", keys: ["Ctrl", "⌘", "V"])
         }
@@ -328,12 +328,20 @@ private struct ShortcutsCard: View {
 
 private struct PrivacyCard: View {
     let dictations: Int
+    /// The polish server's host, when one is set.
+    let server: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("On this Mac only", systemImage: "lock").font(.headline)
-            Text("Speech, cleanup and history never leave this Mac. There is nothing to sign in to.")
-                .font(.callout).foregroundStyle(.secondary)
+            if let server {
+                Label("Polish via \(server)", systemImage: "network").font(.headline)
+                Text("Speech and history stay on this Mac. Polished dictations go to the polish server, which may pass them to free cloud providers. Clear its URL in Settings to keep everything here.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                Label("On this Mac only", systemImage: "lock").font(.headline)
+                Text("Speech, cleanup and history never leave this Mac. There is nothing to sign in to.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Text("\(dictations) dictations stored").font(.caption).foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -379,7 +387,7 @@ private struct HistoryPage: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Text only, kept locally", systemImage: "lock").font(.headline)
-                    Text("No audio is saved. History lives in ~/Library/Application Support/hark/history.jsonl and is never sent anywhere.")
+                    Text("No audio is saved. History lives in ~/Library/Application Support/hark/history.jsonl; the file itself is never sent anywhere.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }

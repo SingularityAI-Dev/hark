@@ -10,7 +10,7 @@ EXPECTED := please send the notes to the whole team before friday
 SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development|Developer ID Application/ {print $$2; exit}')
 SIGN_ID := $(if $(SIGN_ID),$(SIGN_ID),-)
 
-.PHONY: build app install test verify clean
+.PHONY: build app install test verify eval clean
 
 build:
 	swift build -c release
@@ -54,6 +54,11 @@ verify: build
 	@perl -e 'alarm 15; exec @ARGV' $(BIN) --stream-file $(EMPTY) \
 	  && echo "verify no-audio: PASS" || { echo "verify no-audio: FAIL"; exit 1; }
 	$(BIN) --doctor
+
+# Hesitation and self-correction cases through the on-device model. Needs Apple
+# Intelligence; output can shift between macOS releases, so rerun it after updates.
+eval: build
+	./scripts/eval-polish.sh $(BIN)
 
 clean:
 	rm -rf .build build
