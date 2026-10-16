@@ -12,7 +12,7 @@ private let log = Logger(subsystem: "dev.hark.app", category: "polish")
 /// 0.7 to 0.9 s for a 20-word sentence on an M1 Pro.
 enum Refiner {
     /// Below this many words the rule-based pass is enough and the model is skipped.
-    static let modelThreshold = 8
+    static let modelThreshold = 3
 
     static var modelAvailable: Bool { PolishServer.configured != nil || onDeviceModelAvailable }
 
@@ -35,8 +35,12 @@ enum Refiner {
             final version, joined to the start of the sentence so it reads as one thought.
             - Delete phrases the speaker starts and abandons before starting again.
             - Keep words that carry meaning, such as "I think", "maybe" or "probably".
-            - Fix punctuation and capitalisation. Use paragraph breaks or a list only when the \
-            speaker clearly dictates one.
+            - Fix punctuation and capitalisation.
+            - When the speaker announces a list ("the following", "these things", "a list of", \
+            "first, second, third") and then names items, write the lead-in ending with a colon, \
+            then one item per line, each starting with "- ". Keep their wording for each item and \
+            drop the announcing phrase. Anything after the items goes on its own line without a \
+            dash. Do not make a list from a sentence that merely contains "and" or commas.
             - Repair words the speech recogniser probably misheard, which happens often with \
             mumbled, slurred or accented speech. Where a word or short phrase makes no sense in \
             the sentence, replace it with the one that sounds alike and fits ("hole" for "whole", \
@@ -51,6 +55,11 @@ enum Refiner {
             Reply: "Can you open the receipt in my Drive?"
             Transcript: "let's see if the and you know but okay so the point is it should be quicker"
             Reply: "The point is, it should be quicker."
+            Transcript: "so the following things need doing today send the invoice call the \
+            plumber and book the flights"
+            Reply: "These things need doing today:\n- Send the invoice\n- Call the plumber\n- Book the flights"
+            Transcript: "we bought milk, eggs and bread on the way home"
+            Reply: "We bought milk, eggs and bread on the way home."
             Transcript: "the ruff draft is in the folder and we should of sent it sooner"
             Reply: "The rough draft is in the folder and we should have sent it sooner."
             Transcript: "please attach the minuets from the call and go over the hole budget before monday"
