@@ -410,7 +410,7 @@ private struct HistoryPage: View {
                     ForEach(groups, id: \.day) { group in
                         Section(header(group.day)) {
                             ForEach(group.entries) { entry in
-                                HistoryRow(entry: entry)
+                                HistoryRow(entry: entry, copy: copy)
                                     .contextMenu {
                                         Button("Copy") { copy(entry.text) }
                                         Button("Copy as heard") { copy(entry.raw) }
@@ -456,6 +456,8 @@ private struct HistoryPage: View {
 
 private struct HistoryRow: View {
     let entry: HistoryStore.Entry
+    let copy: (String) -> Void
+    @State private var copied = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
@@ -468,6 +470,18 @@ private struct HistoryRow: View {
                 Text([entry.app, "\(TextCleaner.wordCount(entry.text)) words"].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.tertiary)
             }
+            Spacer(minLength: 0)
+            Button {
+                copy(entry.text)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+            } label: {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .foregroundStyle(copied ? .green : .secondary)
+                    .frame(width: 20)
+            }
+            .buttonStyle(.borderless)
+            .help(copied ? "Copied" : "Copy")
         }
         .padding(.vertical, 6)
     }

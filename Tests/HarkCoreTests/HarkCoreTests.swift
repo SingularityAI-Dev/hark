@@ -240,3 +240,19 @@ import Testing
         }
     }
 }
+
+@Suite struct RepairTests {
+    @Test func acceptsARepairOfMisheardWords() {
+        let heard = "we need to go over the hole operation of agents"
+        let repaired = "We need to review the whole operation of all agents."
+        #expect(TextCleaner.isPlausibleRefinement(original: heard, refined: repaired))
+    }
+
+    @Test func stillRefusesAnswersAndSummaries() {
+        let question = "what is the weather going to be like tomorrow in Durban"
+        let answer = "It will be sunny with a high of twenty six degrees and a light breeze from the sea."
+        #expect(!TextCleaner.isPlausibleRefinement(original: question, refined: answer))
+        let long = "please book the room on the third floor for the whole team from nine until twelve on Thursday and order coffee and lunch for twelve people"
+        #expect(!TextCleaner.isPlausibleRefinement(original: long, refined: "Book a room."))
+    }
+}

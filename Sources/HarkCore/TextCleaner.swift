@@ -120,7 +120,7 @@ public enum TextCleaner {
         vocabulary(text).contains { correctionCues.contains($0) }
     }
 
-    private static func vocabulary(_ text: String) -> [String] {
+    static func vocabulary(_ text: String) -> [String] {
         text.lowercased()
             .split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "'") })
             .map(String.init)
@@ -129,6 +129,7 @@ public enum TextCleaner {
     /// Guards against the language model answering the dictation, summarising it away or
     /// padding it. Cleanup removes words and rarely adds any, so the result must be about
     /// the same length or shorter and built almost entirely from the speaker's own words.
+    /// The model also repairs misheard words, so up to about a third of the words may be new.
     public static func isPlausibleRefinement(original: String, refined: String) -> Bool {
         let before = wordCount(original)
         let after = wordCount(refined)
@@ -142,6 +143,6 @@ public enum TextCleaner {
         let written = vocabulary(refined)
         guard !written.isEmpty else { return false }
         let kept = written.filter { spoken.contains($0) }.count
-        return Double(kept) / Double(written.count) >= 0.75
+        return Double(kept) / Double(written.count) >= 0.65
     }
 }

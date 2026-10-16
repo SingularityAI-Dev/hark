@@ -297,17 +297,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.center()
             dashboardWindow = window
         }
+        showInDock()
         NSApp.activate(ignoringOtherApps: true)
         dashboardWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// Drops the closed window so its views are freed and idle memory goes back down.
     func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, window === dashboardWindow else { return }
+        guard let window = notification.object as? NSWindow else { return }
         DispatchQueue.main.async { [weak self] in
-            window.contentViewController = nil
-            self?.dashboardWindow = nil
+            guard let self else { return }
+            if window === dashboardWindow {
+                window.contentViewController = nil
+                dashboardWindow = nil
+            }
+            hideFromDockIfNoWindows()
         }
+    }
+
+    /// While the hark window or Settings is open the app shows in the Dock and the
+    /// Command-Tab switcher; with both closed it goes back to being menu bar only.
+    private func showInDock() {
+        NSApp.setActivationPolicy(.regular)
+    }
+
+    private func hideFromDockIfNoWindows() {
+        let open = [dashboardWindow, settingsWindow].contains { $0?.isVisible == true }
+        if !open { NSApp.setActivationPolicy(.accessory) }
     }
 
     @objc private func openSettings() {
@@ -316,8 +332,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.title = "hark Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
+            window.delegate = self
             settingsWindow = window
         }
+        showInDock()
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.center()
         settingsWindow?.makeKeyAndOrderFront(nil)

@@ -35,8 +35,13 @@ enum Refiner {
             final version, joined to the start of the sentence so it reads as one thought.
             - Delete phrases the speaker starts and abandons before starting again.
             - Keep words that carry meaning, such as "I think", "maybe" or "probably".
-            - Fix punctuation, capitalisation and obvious recognition slips. Use paragraph \
-            breaks or a list only when the speaker clearly dictates one.
+            - Fix punctuation and capitalisation. Use paragraph breaks or a list only when the \
+            speaker clearly dictates one.
+            - Repair words the speech recogniser probably misheard, which happens often with \
+            mumbled, slurred or accented speech. Where a word or short phrase makes no sense in \
+            the sentence, replace it with the one that sounds alike and fits ("hole" for "whole", \
+            "that all" for "and all that"). Change as few words as possible and leave clear \
+            wording alone.
             Reply with the cleaned text only: no tags, no quotes, no commentary.
             Examples.
             Transcript: "um hey can you tell me what time the the shop opens tomorrow"
@@ -46,6 +51,12 @@ enum Refiner {
             Reply: "Can you open the receipt in my Drive?"
             Transcript: "let's see if the and you know but okay so the point is it should be quicker"
             Reply: "The point is, it should be quicker."
+            Transcript: "the ruff draft is in the folder and we should of sent it sooner"
+            Reply: "The rough draft is in the folder and we should have sent it sooner."
+            Transcript: "please attach the minuets from the call and go over the hole budget before monday"
+            Reply: "Please attach the minutes from the call and go over the whole budget before Monday."
+            Transcript: "I want them to see the plan that all steps of the process"
+            Reply: "I want them to see the plan and all the steps of the process."
             """
         if !dictionary.isEmpty {
             text += "\nSpell these terms exactly as written when they occur: "
