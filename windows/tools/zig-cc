@@ -1,0 +1,16 @@
+#!/bin/bash
+# zig cc for x86_64 Windows. Works around two things Rust's toolchain passes that zig rejects:
+# the --target flag (zig has its own), and -l flags for the windows crate's static import
+# archive and msvcrt, which zig looks for as .dll files.
+import_lib=$(ls "$HOME"/.cargo/registry/src/*/windows_x86_64_gnu-0.52.6/lib/libwindows.0.52.0.a 2>/dev/null | head -1)
+args=()
+for a in "$@"; do
+  case "$a" in
+    --target=*) ;;
+    -lwindows.0.52.0) args+=("$import_lib") ;;
+    -lmsvcrt) ;;
+    -l:libpthread.a) ;;
+    *) args+=("$a") ;;
+  esac
+done
+exec zig cc -target x86_64-windows-gnu "${args[@]}"

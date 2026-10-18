@@ -1,0 +1,7 @@
+# Cross-compiling from macOS uses zig as the C compiler and linker, so no mingw is needed.
+[target.x86_64-pc-windows-gnu]
+linker = "tools/zig-cc"
+
+[env]
+CC_x86_64_pc_windows_gnu = { value = "tools/zig-cc", relative = true }
+AR_x86_64_pc_windows_gnu = { value = "tools/zig-ar", relative = true }
