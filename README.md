@@ -166,7 +166,7 @@ WhatsApp." Its answer is thrown away if it does not read as a cleanup of your ow
 ### Polish server
 
 By default polish uses Apple's on-device model, and nothing leaves the Mac. It is not
-clever enough for heavy self-correction (11 of 15 `make eval` cases). For better results,
+clever enough for heavy self-correction (18 of 24 `make eval` cases). For better results,
 set an OpenAI-compatible server under Settings > Polish server. With
 [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) running in Docker:
 
@@ -187,9 +187,10 @@ cleanup instead. Leave the URL empty to keep everything on the Mac.
   audio and the Fn key were confirmed with real speech.
 - **29 unit tests** passing (`make test`) for the hotkey state machine, cleanup rules,
   stats and sounds.
-- **Polish eval** (`make eval`): 15 hesitant or self-correcting sentences. Through
-  FreeLLMAPI `auto`: 15 of 15, median 0.47 s, slowest 9 s. Apple's on-device model: 11
-  of 15 (2026-10-14).
+- **Polish eval** (`make eval`): 24 hesitant, self-correcting, misheard or list-shaped
+  sentences. Through FreeLLMAPI `auto`: 22 of 24, then 17 of 24 when the free upstream
+  was slow and five cases hit the 10 s timeout. Apple's on-device model: 18 of 24
+  (2026-10-20).
 - **End-to-end speech check** without a microphone (`make verify`), including the live
   streaming path and a recording with no audio in it.
 - **14 MB** footprint at launch, **21 MB** after 19 hours running, about **36 MB** while
@@ -207,13 +208,13 @@ is 648 KB. Typeless idles at 181 MB across 7 processes and takes 529 MB on disk.
   <img src="docs/assets/footprint.svg" alt="Memory: hark 21 MB in one process, Typeless 181 MB across 7. Disk: hark 648 KB, Typeless 529 MB." width="100%"/>
 </p>
 
-**Polish.** Measured with `make eval` on 2026-10-14:
+**Polish.** Measured with `make eval` (24 cases) on 2026-10-20:
 
 | Engine | Passed | Time |
 | --- | --- | --- |
-| FreeLLMAPI, model `auto` | 15 of 15 | median 0.47 s, slowest 9 s |
-| Apple on-device model | 11 of 15 | 0.7 to 0.9 s warm, 4 to 10 s for long or cold |
-| FreeLLMAPI, a single pinned model | 7 to 11 of 15 | pinned models were rate-limited, missing or timed out |
+| FreeLLMAPI, model `auto` | 22 of 24, then 17 of 24 | median 1.1 to 3.4 s; misses were mostly the 10 s timeout |
+| Apple on-device model | 18 of 24 | 0.7 to 0.9 s warm, 4 to 10 s for long or cold |
+| FreeLLMAPI, a single pinned model | 10 of 24 | `gpt-oss-120b` answered once in 1.6 s, then was rate-limited |
 
 Pin nothing: `auto` moves to the next free model when one is rate-limited. Apple's model
 once answered a dictated question instead of cleaning it, which is why every polish

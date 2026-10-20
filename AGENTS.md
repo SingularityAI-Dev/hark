@@ -25,11 +25,13 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
   no calls to its servers. `docs/findings.md` records behaviour only.
 - Pure logic goes in `Sources/HarkCore` with tests. Anything touching AppKit, audio, the
   event tap or Apple's models goes in `Sources/hark`.
-- Polish is on by default since 2026-10-14 (Shift skips it). `make eval` is the check:
-  FreeLLMAPI `auto` 15 of 15, Apple on-device 11 of 15. Apple's model once answered a
-  dictated question instead of cleaning it. `TextCleaner.isPlausibleRefinement` is the
-  guard; keep
-  its tests passing.
+- Polish is on by default since 2026-10-14 (Shift skips it). `make eval` is the check
+  (24 cases). It runs Apple's on-device model unless `HARK_POLISH_URL` and
+  `HARK_POLISH_KEY` are set, so set them to measure the server. On 2026-10-20: FreeLLMAPI
+  `auto` 22 of 24 and then 17 of 24, the misses being almost all 10 s timeouts (the free
+  upstream is slow under load, and a timeout pastes the rule-cleaned text); Apple
+  on-device 18 of 24. Apple's model once answered a dictated question instead of cleaning
+  it. `TextCleaner.isPlausibleRefinement` is the guard; keep its tests passing.
 - Measure before claiming: latency in milliseconds, memory with `footprint`, insertion by
   reading the target document back.
 

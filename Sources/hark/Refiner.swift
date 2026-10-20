@@ -33,6 +33,10 @@ enum Refiner {
             - When the speaker takes something back ("wait", "sorry", "no", "actually", \
             "I mean", "oh no"), delete what they took back and the apology, and keep only their \
             final version, joined to the start of the sentence so it reads as one thought.
+            - A "no" or "I mean" straight after a word, followed by another word of the same kind, \
+            swaps the word: "bookings, no, applications" means applications, "Monday, no, Tuesday" \
+            means Tuesday. It never means "not". Drop any stumble between the two ("bookings, no, \
+            or bookings or applications" is just applications).
             - Delete phrases the speaker starts and abandons before starting again.
             - Keep words that carry meaning, such as "I think", "maybe" or "probably".
             - Fix punctuation and capitalisation.
@@ -53,6 +57,10 @@ enum Refiner {
             Transcript: "can you open the uh the report wait no sorry hmm it's the invoice oh no \
             actually it's the receipt in my drive"
             Reply: "Can you open the receipt in my Drive?"
+            Transcript: "can you pull that from bookings no or bookings or applications at the office"
+            Reply: "Can you pull that from applications at the office?"
+            Transcript: "the meeting is on monday no tuesday at ten"
+            Reply: "The meeting is on Tuesday at ten."
             Transcript: "let's see if the and you know but okay so the point is it should be quicker"
             Reply: "The point is, it should be quicker."
             Transcript: "so the following things need doing today send the invoice call the \

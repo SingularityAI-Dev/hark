@@ -219,6 +219,12 @@ import Testing
         let plain = "please book the room on the third floor for the whole team from nine until twelve on Thursday and order coffee and lunch for twelve people"
         #expect(!TextCleaner.isPlausibleRefinement(original: plain, refined: "Book the room on Thursday."))
     }
+
+    @Test func plausibilityAcceptsAWordSwappedWithNo() {
+        let heard = "can you pull that from bookings no or bookings or applications at IDSA on it"
+        #expect(TextCleaner.isPlausibleRefinement(original: heard, refined: "Can you pull that from applications at IDSA on it?"))
+        #expect(TextCleaner.isPlausibleRefinement(original: "the meeting is on monday no tuesday at ten", refined: "The meeting is on Tuesday at ten."))
+    }
 }
 
 @Suite struct ChimeTests {
