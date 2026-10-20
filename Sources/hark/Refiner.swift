@@ -7,9 +7,10 @@ private let log = Logger(subsystem: "dev.hark.app", category: "polish")
 
 /// Turns a raw transcript into the text the speaker meant to type. The rule-based pass
 /// always runs; a language model runs after it by default (Shift skips it for one
-/// dictation). The model is the polish server when one is set in Settings, otherwise
-/// Apple's on-device model, which passed 11 of 15 `make eval` cases on 2026-10-14 and took
-/// 0.7 to 0.9 s for a 20-word sentence on an M1 Pro.
+/// dictation). The model is the polish server when one is set in Settings, with Apple's
+/// on-device model started as a backup when the server is slow (see `serverHeadStart`);
+/// without a server it is Apple's model alone, which passed 18 of 24 `make eval` cases on
+/// 2026-10-20 and took 0.7 to 0.9 s for a 20-word sentence on an M1 Pro.
 enum Refiner {
     /// Below this many words the rule-based pass is enough and the model is skipped.
     static let modelThreshold = 3
@@ -82,30 +83,88 @@ enum Refiner {
         return text
     }
 
-    /// Loads the model while the user is still speaking.
+    /// How long the polish server gets on its own before Apple's model starts as a backup.
+    /// The server does better (22 of 24 eval cases against 18 of 24) but its free upstreams
+    /// sometimes take 10 s or more, while Apple's model answers most sentences in 1 to 3 s
+    /// once warm. Whichever plausible answer lands first is used.
+    static let serverHeadStart: Duration = .seconds(2.5)
+
+    /// The most a dictation waits for polish; after this the rule-cleaned text is pasted.
+    /// The server's own 10 s timeout only covers a silent connection, not a slow upstream
+    /// that keeps the connection open (seen taking 34 s on 2026-10-20).
+    static let deadline: Duration = .seconds(10)
+
+    private enum Outcome {
+        case answer(String?)
+        case deadline
+    }
+
+    /// Loads Apple's model while the user is still speaking, so it is warm if it is needed.
     static func prewarm(dictionary: [String]) {
-        guard PolishServer.configured == nil, onDeviceModelAvailable else { return }
+        guard onDeviceModelAvailable else { return }
         LanguageModelSession(instructions: instructions(dictionary: dictionary)).prewarm()
     }
 
     static func refine(_ raw: String, dictionary: [String], useModel: Bool) async -> String {
         let cleaned = TextCleaner.clean(raw)
         guard useModel, modelAvailable, TextCleaner.wordCount(cleaned) >= modelThreshold else { return cleaned }
+        let instructions = instructions(dictionary: dictionary)
         let prompt = "<transcript>\n\(cleaned)\n</transcript>"
-        do {
-            let output: String
-            if let server = PolishServer.configured {
-                // On failure or after 10 s fall back to the instant cleanup, not the slower on-device model.
-                output = try await server.complete(instructions: instructions(dictionary: dictionary), prompt: prompt)
-            } else {
-                let session = LanguageModelSession(instructions: instructions(dictionary: dictionary))
-                output = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy)).content
+        let server = PolishServer.configured
+        // Unstructured tasks rather than a task group: a group waits for every child before
+        // it returns, and Apple's model does not stop generating when cancelled, so a group
+        // would hold the paste until it finished (20 s seen under load on 2026-10-20).
+        let (outcomes, continuation) = AsyncStream.makeStream(of: Outcome.self)
+        var tasks: [Task<Void, Never>] = []
+        if let server {
+            tasks.append(Task {
+                continuation.yield(.answer(await attempt("server") {
+                    try await server.complete(instructions: instructions, prompt: prompt)
+                }))
+            })
+        }
+        if onDeviceModelAvailable {
+            tasks.append(Task {
+                if server != nil {
+                    try? await Task.sleep(for: serverHeadStart)
+                    if Task.isCancelled { return }
+                }
+                continuation.yield(.answer(await attempt("on-device") {
+                    let session = LanguageModelSession(instructions: instructions)
+                    return try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy)).content
+                }))
+            })
+        }
+        tasks.append(Task {
+            try? await Task.sleep(for: deadline)
+            continuation.yield(.deadline)
+        })
+        defer {
+            tasks.forEach { $0.cancel() }
+            continuation.finish()
+        }
+        var unanswered = tasks.count - 1
+        for await outcome in outcomes {
+            switch outcome {
+            case .answer(let output?) where TextCleaner.isPlausibleRefinement(original: cleaned, refined: output):
+                return output
+            case .answer:
+                unanswered -= 1
+                if unanswered == 0 { return cleaned }
+            case .deadline:
+                log.error("polish gave up after \(deadline.components.seconds, privacy: .public) s")
+                return cleaned
             }
-            let refined = strip(output)
-            return TextCleaner.isPlausibleRefinement(original: cleaned, refined: refined) ? refined : cleaned
+        }
+        return cleaned
+    }
+
+    private static func attempt(_ name: String, _ body: () async throws -> String) async -> String? {
+        do {
+            return strip(try await body())
         } catch {
-            log.error("polish failed: \(String(describing: error), privacy: .public)")
-            return cleaned
+            log.error("\(name, privacy: .public) polish failed: \(String(describing: error), privacy: .public)")
+            return nil
         }
     }
 

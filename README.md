@@ -176,8 +176,10 @@ set an OpenAI-compatible server under Settings > Polish server. With
 
 **With a server set, every polished dictation is sent to it, and FreeLLMAPI forwards it to
 whichever free cloud provider its router picks.** Free tiers may keep or train on what
-they receive. If the server fails or takes over 10 seconds, hark pastes the instant
-cleanup instead. Leave the URL empty to keep everything on the Mac.
+they receive. The server gets 2.5 seconds on its own; after that Apple's on-device model
+runs beside it and whichever plausible answer lands first is pasted. If neither has
+answered after 10 seconds, hark pastes the instant cleanup instead. Leave the URL empty
+to keep everything on the Mac.
 
 ---
 

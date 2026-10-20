@@ -21,7 +21,7 @@ enum CLI {
         let command = arguments[0]
         let value = arguments.count > 1 ? arguments[1] : nil
         let clock = ContinuousClock()
-        let started = clock.now
+        var started = clock.now
         func elapsed() -> String {
             let duration = clock.now - started
             return "\(Int(Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15)) ms"
@@ -55,6 +55,11 @@ enum CLI {
                 return 1
             }
         case ("--refine", let text?):
+            // Like the app, which warms Apple's model while the user speaks: warm it, then
+            // time only the polish itself.
+            Refiner.prewarm(dictionary: Settings.shared.dictionary)
+            try? await Task.sleep(for: .seconds(2))
+            started = clock.now
             print(await Refiner.refine(text, dictionary: Settings.shared.dictionary, useModel: true))
             FileHandle.standardError.write(Data("refined in \(elapsed())\n".utf8))
             return 0

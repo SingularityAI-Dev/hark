@@ -32,6 +32,13 @@ Native Swift, menu bar only, zero third-party dependencies. See `README.md` for 
   upstream is slow under load, and a timeout pastes the rule-cleaned text); Apple
   on-device 18 of 24. Apple's model once answered a dictated question instead of cleaning
   it. `TextCleaner.isPlausibleRefinement` is the guard; keep its tests passing.
+- Polish races (since 2026-10-20): the server gets `Refiner.serverHeadStart` (2.5 s) alone,
+  then Apple's model runs beside it and the first plausible answer is pasted;
+  `Refiner.deadline` (10 s) pastes the rule-cleaned text instead. Both run as unstructured
+  tasks on purpose: a task group waits for its children and Apple's model ignores
+  cancellation, so a group held one paste for 20 s. The server's URL timeout only covers a
+  silent connection; an upstream that keeps the connection open took 34 s before the
+  deadline existed.
 - Measure before claiming: latency in milliseconds, memory with `footprint`, insertion by
   reading the target document back.
 
