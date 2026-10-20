@@ -2,6 +2,11 @@
 
 > Last 20 changes. Full history in git.
 
+- 2026-10-20: Polish races the server against Apple's model (server alone for 2.5 s, first plausible answer wins) with a hard 10 s ceiling; measured 23 of 24 `make eval` cases, median 0.9 s (`134fe9a`)
+- 2026-10-20: A bare "no" or "I mean" between two words now swaps them instead of reading as "not" ("bookings, no, applications"); eval set grown to 24 cases; `make eval` documented as on-device unless `HARK_POLISH_URL`/`HARK_POLISH_KEY` are set (`abb0bf7`)
+- 2026-10-18: Windows version added under `windows/` (Rust, 64-bit, cross-compiled from the Mac with zig; Right Ctrl hold-to-talk, Windows speech, same polish prompt). Builds and links; never run on Windows yet (`5b8bb69`)
+- 2026-10-16: Short phrases (3 words and up) get polish; spoken lists ("the following...") come out as a colon plus bullets (`110d643`)
+- 2026-10-16: Misheard words repaired by the polish prompt (guard overlap lowered to 0.65); app icon; history copy button; Cmd-Tab presence (`82a505c`)
 - 2026-10-14: Polish on by default and smarter: drops what you take back and half-finished phrases; optional OpenAI-compatible polish server (FreeLLMAPI `auto`: 15 of 15 on `make eval`); instant cleanup removes repeated phrases, "ah" and filler "you know"; gentle synthesised start and finish chimes; new menu bar icon
 - 2026-10-14: hark window (menu > Open hark…): Home stats with period picker, streaks and a words-per-day grid; searchable History with retention setting; Dictionary page. History now records speaking time for words per minute
 - 2026-10-14: README reworked with animated diagrams in `docs/assets/`
