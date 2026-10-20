@@ -114,7 +114,12 @@ public enum TextCleaner {
         text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
-    private static let correctionCues: Set<String> = ["wait", "sorry", "no", "actually", "mean", "scratch", "rather", "correction"]
+    /// Words that mark a take-back or a spoken formatting instruction ("one word", "capital
+    /// S", "all caps", "spelled"); either can legitimately shrink a dictation a great deal.
+    private static let correctionCues: Set<String> = [
+        "wait", "sorry", "no", "actually", "mean", "scratch", "rather", "correction",
+        "word", "capital", "caps", "lowercase", "uppercase", "spelled", "spelt", "hyphenated",
+    ]
 
     private static func takesSomethingBack(_ text: String) -> Bool {
         vocabulary(text).contains { correctionCues.contains($0) }
@@ -139,7 +144,14 @@ public enum TextCleaner {
         let shrinkLimit = takesSomethingBack(original) ? 0.15 : 0.35
         guard Double(after) >= Double(before) * shrinkLimit, after <= before + max(3, before / 4) else { return false }
 
-        let spoken = Set(vocabulary(original))
+        let spokenWords = vocabulary(original)
+        var spoken = Set(spokenWords)
+        // "single source, one word" becomes "singlesource": a run of two or three spoken
+        // words joined up still counts as the speaker's own.
+        for (index, word) in spokenWords.enumerated() {
+            if index + 1 < spokenWords.count { spoken.insert(word + spokenWords[index + 1]) }
+            if index + 2 < spokenWords.count { spoken.insert(word + spokenWords[index + 1] + spokenWords[index + 2]) }
+        }
         let written = vocabulary(refined)
         guard !written.isEmpty else { return false }
         let kept = written.filter { spoken.contains($0) }.count

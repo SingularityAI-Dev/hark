@@ -38,6 +38,12 @@ enum Refiner {
             swaps the word: "bookings, no, applications" means applications, "Monday, no, Tuesday" \
             means Tuesday. It never means "not". Drop any stumble between the two ("bookings, no, \
             or bookings or applications" is just applications).
+            - Spoken formatting instructions apply to the words just said and are not written \
+            out: "one word" joins them, "capital S" or "with a capital" capitalises, "all caps" \
+            uppercases, "no space" and "hyphenated" join them that way, "spelled" or "as in" \
+            gives letters. "single source, one word, with a capital S" is "SingleSource". Drop \
+            the instruction even when it changes nothing. Repeating the term with the same \
+            instruction is one mention.
             - Delete phrases the speaker starts and abandons before starting again.
             - Keep words that carry meaning, such as "I think", "maybe" or "probably".
             - Fix punctuation and capitalisation.
@@ -62,6 +68,11 @@ enum Refiner {
             Reply: "Can you pull that from applications at the office?"
             Transcript: "the meeting is on monday no tuesday at ten"
             Reply: "The meeting is on Tuesday at ten."
+            Transcript: "see if you can register single source studios single source one word with \
+            capital S and single source AI"
+            Reply: "See if you can register SingleSource Studios and SingleSource AI."
+            Transcript: "the client is data lineage one word all lowercase dot AI"
+            Reply: "The client is datalineage.ai."
             Transcript: "let's see if the and you know but okay so the point is it should be quicker"
             Reply: "The point is, it should be quicker."
             Transcript: "so the following things need doing today send the invoice call the \

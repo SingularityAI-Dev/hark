@@ -220,6 +220,14 @@ import Testing
         #expect(!TextCleaner.isPlausibleRefinement(original: plain, refined: "Book the room on Thursday."))
     }
 
+    @Test func plausibilityAcceptsSpokenFormattingInstructions() {
+        let heard = "see if you can register single source studios single source one word single stores AI single source one word but with capital S and"
+        #expect(TextCleaner.isPlausibleRefinement(original: heard, refined: "See if you can register SingleSource Studios and SingleSource AI."))
+        #expect(TextCleaner.isPlausibleRefinement(original: "the client is data lineage one word all lowercase dot AI", refined: "The client is datalineage.ai."))
+        // Joining words the speaker never said in sequence is still an invention.
+        #expect(!TextCleaner.isPlausibleRefinement(original: "book the room for the whole team on Thursday", refined: "Book Teamroom Wholething Thursday."))
+    }
+
     @Test func plausibilityAcceptsAWordSwappedWithNo() {
         let heard = "can you pull that from bookings no or bookings or applications at IDSA on it"
         #expect(TextCleaner.isPlausibleRefinement(original: heard, refined: "Can you pull that from applications at IDSA on it?"))

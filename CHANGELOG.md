@@ -2,6 +2,7 @@
 
 > Last 20 changes. Full history in git.
 
+- 2026-10-20: Spoken formatting instructions are applied, not typed: "single source, one word, with a capital S" pastes as "SingleSource"; the guard accepts joined runs of spoken words
 - 2026-10-20: Polish races the server against Apple's model (server alone for 2.5 s, first plausible answer wins) with a hard 10 s ceiling; measured 23 of 24 `make eval` cases, median 0.9 s (`134fe9a`)
 - 2026-10-20: A bare "no" or "I mean" between two words now swaps them instead of reading as "not" ("bookings, no, applications"); eval set grown to 24 cases; `make eval` documented as on-device unless `HARK_POLISH_URL`/`HARK_POLISH_KEY` are set (`abb0bf7`)
 - 2026-10-18: Windows version added under `windows/` (Rust, 64-bit, cross-compiled from the Mac with zig; Right Ctrl hold-to-talk, Windows speech, same polish prompt). Builds and links; never run on Windows yet (`5b8bb69`)
