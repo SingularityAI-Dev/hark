@@ -33,6 +33,10 @@ struct PolishServer {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "model": model,
             "temperature": 0,
+            // Reasoning models (Groq's gpt-oss) otherwise think for 2,000 tokens on a long
+            // dictation, hit the output cap and return nothing usable: 10 s ceiling every time.
+            "reasoning_effort": "low",
+            "max_tokens": 4096,
             "messages": [
                 ["role": "system", "content": instructions],
                 ["role": "user", "content": prompt],

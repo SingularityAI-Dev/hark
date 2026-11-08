@@ -1,18 +1,22 @@
 # Status
 
-> Updated: 2026-10-20
+> Updated: 2026-10-26
 
 ## Where we are
-hark is installed at `/Applications/hark.app` (build of 2026-10-20 15:17, `b721e39`) and in daily use by Rainier: hold or tap Fn, speak, text is pasted at the cursor. Speech runs on the Mac; polish goes to FreeLLMAPI at `localhost:3001` (model `auto`) with Apple's on-device model as a backup after 2.5 s and a hard 10 s ceiling. Remote `SingularityAI-Dev/hark`, `main` at `b721e39`, tree clean.
+hark is installed at `/Applications/hark.app` and in daily use. Polish goes to a native FreeLLMAPI on `localhost:3001` with model `gpt-oss-20b` (Groq), low reasoning effort, Apple's model as backup after 2.5 s and a 10 s ceiling. `main` is at `1a50086`; the one uncommitted change is the request tuning in `Sources/hark/PolishServer.swift`, which is already in the installed build.
 
 ## Recent
-- 2026-10-20 (afternoon): spoken formatting instructions are applied, not typed: "single source, one word, with a capital S" pastes as "SingleSource"; the guard counts joined runs of spoken words as the speaker's own. Server verified in 1 to 2 s; Apple's model unmeasured (it hit the ceiling under load).
-- 2026-10-20: real waits after the race build, 12 dictations: median 2.25 s, p75 3.2 s, max 9.3 s (one 23-word case during load average 42); none past the ceiling. Before the race, long dictations waited about 10.5 s.
-- 2026-10-20: "bookings, no, applications" swap rule; slowness traced to FreeLLMAPI's free upstreams and fixed with the race plus ceiling (`134fe9a`), eval 23 of 24, median 0.9 s.
+- 2026-10-21 to 2026-10-26: real waits (`seconds - spoken`) monitored every 10 minutes. Every dictation waited 5.4 s or less, none near the ceiling; the last 11 (24 to 25 October) had a median of 1.57 s and a max of 4.45 s, all served by Groq.
+- 2026-10-22: FreeLLMAPI moved out of Docker into a LaunchAgent. Cloudflare Workers AI measured for the Windows build: `@cf/openai/gpt-oss-20b` 3.5 s on a 98-word dictation against 1.1 s for Groq via FreeLLMAPI, so the Mac stays on FreeLLMAPI.
+- 2026-10-21: pinned `gpt-oss-20b` with `reasoning_effort: low` and `max_tokens: 4096`. Without them gpt-oss spent its output cap on reasoning and long dictations hit the ceiling; `auto` wandered to upstreams taking 10 s or more.
 
 ## Next
-- The Mac's load average sat between 8 and 42 all afternoon (`fseventsd` 56% CPU, `WindowServer` 48%); that inflates every wait and starves Apple's backup model. Find the file-system event source before judging the backup path.
-- Windows `.exe` for the friend: blocked on a reachable HTTPS endpoint for FreeLLMAPI (`hark.hub1.ai` cannot work, hub1.ai nameservers are Hostinger parking with no access). Options: Cloudflare quick tunnel (URL changes per restart) or host FreeLLMAPI elsewhere. Never run on Windows.
-- Keep `windows/prompt.txt` in sync with `Refiner.swift` (regenerate after any prompt edit).
-- Still owed: key release to text latency (median of 10), a screen recording in `docs/`, insertion checks in an Electron app and a browser field, a microphone picker test; friend's macOS version (needs 26).
-- Known limits: "That all operation" and "nodes" to "notes" are not repaired; paste uses a fixed V key code; Apple's model drops a genuine "not X" when the recogniser gives no commas; a spoken email address can gain a hyphen ("single source dot co dot za").
+- Commit the `PolishServer.swift` change, then update CLAUDE.md and AGENTS.md, which still describe model `auto` and Docker.
+- FreeLLMAPI sometimes routes `gpt-oss-20b` to NVIDIA, which hangs to the ceiling. Fix: disable the `nvidia` / `openai/gpt-oss-20b` row via `freellmapi.config.json` and restart; recheck after a catalog refresh.
+- Quit Docker Desktop; its container still holds `127.0.0.1:3001`, harmless only because `localhost` resolves to `::1` first.
+- Windows build: bake the Cloudflare Workers AI endpoint and token into `windows/build.rs`; never run on Windows yet.
+- Explain the 2 to 3.6 s of in-app time beyond server latency; hark's `log.notice` stage timings do not reach `log show`.
+- Rerun `make eval` after the formatting change; Apple's backup is too slow on long inputs.
+- Recover mode for slurred speech: plan in `~/.claude/plans/we-need-to-improve-enumerated-orbit.md`, not started.
+- Still owed: insertion checks in an Electron app and a browser field, microphone picker test, friend's macOS version (needs 26).
+- Known limits: paste uses a fixed V key code; "nodes" heard as "notes" is not repaired; a spoken email address can gain a hyphen.

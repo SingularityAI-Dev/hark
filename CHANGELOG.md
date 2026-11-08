@@ -2,6 +2,8 @@
 
 > Last 20 changes. Full history in git.
 
+- 2026-10-22: FreeLLMAPI moved from Docker to a native LaunchAgent (`com.rainier.freellmapi`, port 3001); hark's keychain key updated to the new instance
+- 2026-10-21: Polish requests send `reasoning_effort: low` and `max_tokens: 4096`, and the polish model is pinned to `gpt-oss-20b` instead of `auto`; long dictations no longer hit the 10 s ceiling. Installed, not yet committed
 - 2026-10-20: Spoken formatting instructions are applied, not typed: "single source, one word, with a capital S" pastes as "SingleSource"; the guard accepts joined runs of spoken words
 - 2026-10-20: Polish races the server against Apple's model (server alone for 2.5 s, first plausible answer wins) with a hard 10 s ceiling; measured 23 of 24 `make eval` cases, median 0.9 s (`134fe9a`)
 - 2026-10-20: A bare "no" or "I mean" between two words now swaps them instead of reading as "not" ("bookings, no, applications"); eval set grown to 24 cases; `make eval` documented as on-device unless `HARK_POLISH_URL`/`HARK_POLISH_KEY` are set (`abb0bf7`)
