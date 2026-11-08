@@ -50,11 +50,14 @@ final class Settings: ObservableObject {
     /// Empty uses Apple's on-device model. The API key is in the keychain, not here.
     @Published var polishServerURL: String { didSet { defaults.set(polishServerURL, forKey: "polishServerURL") } }
     @Published var polishServerModel: String { didSet { defaults.set(polishServerModel, forKey: "polishServerModel") } }
+    /// Read the field hark pasted into back at the next dictation (Phase 1 only counts what
+    /// it finds; nothing is stored or learned yet).
+    @Published var learnFromEdits: Bool { didSet { defaults.set(learnFromEdits, forKey: "learnFromEdits") } }
     /// How many days of history to keep; 0 keeps everything.
     @Published var keepHistoryDays: Int { didSet { defaults.set(keepHistoryDays, forKey: "keepHistoryDays") } }
 
     private init() {
-        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true, "alwaysPolish": true])
+        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true, "alwaysPolish": true, "learnFromEdits": true])
         triggerKey = TriggerKey(rawValue: defaults.string(forKey: "triggerKey") ?? "") ?? .fn
         localeID = defaults.string(forKey: "localeID") ?? Self.defaultLocaleID()
         alwaysPolish = defaults.bool(forKey: "alwaysPolish")
@@ -64,6 +67,7 @@ final class Settings: ObservableObject {
         dictionaryText = defaults.string(forKey: "dictionaryText") ?? ""
         correctionsText = defaults.string(forKey: "correctionsText") ?? ""
         keepHistoryDays = defaults.integer(forKey: "keepHistoryDays")
+        learnFromEdits = defaults.bool(forKey: "learnFromEdits")
         polishServerURL = defaults.string(forKey: "polishServerURL") ?? ""
         polishServerModel = defaults.string(forKey: "polishServerModel") ?? "auto"
     }

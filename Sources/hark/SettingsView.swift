@@ -9,6 +9,11 @@ struct SettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var serverKey = Keychain.polishServerKey ?? ""
 
+    /// A server URL or Apple's model; checked without touching the keychain on every redraw.
+    private var polishAvailable: Bool {
+        !settings.polishServerURL.trimmingCharacters(in: .whitespaces).isEmpty || Refiner.onDeviceModelAvailable
+    }
+
     var body: some View {
         Form {
             Section("Dictation") {
@@ -30,8 +35,8 @@ struct SettingsView: View {
 
             Section("Cleanup") {
                 Toggle("Polish every dictation with the on-device model", isOn: $settings.alwaysPolish)
-                    .disabled(!Refiner.modelAvailable(server: PolishServer.from(settings.snapshot)))
-                Text(Refiner.modelAvailable(server: PolishServer.from(settings.snapshot))
+                    .disabled(!polishAvailable)
+                Text(polishAvailable
                     ? "Fillers and repeats are always removed instantly. Polishing also drops what you take back (\"wait, sorry, it's the other one\") and half-finished phrases, and fixes punctuation. It adds about a second, more for long dictations. Tap Shift while dictating to switch it for that one."
                     : "Apple Intelligence is off or unsupported on this Mac, so only the instant cleanup runs.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -44,6 +49,12 @@ struct SettingsView: View {
                     .onSubmit { Keychain.polishServerKey = serverKey }
                     .onChange(of: serverKey) { _, key in Keychain.polishServerKey = key }
                 Text("Leave the URL empty to polish with Apple's on-device model. With a URL set, every polished dictation is sent to that server; FreeLLMAPI passes it on to free cloud providers.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Learning") {
+                Toggle("Learn from my edits", isOn: $settings.learnFromEdits)
+                Text("After you edit a dictation and dictate again, hark reads the text it pasted and learns corrected words. The text stays on this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

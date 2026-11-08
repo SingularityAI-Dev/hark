@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let indicator = IndicatorPanel()
     private let history = HistoryStore()
     private let muter = OutputMuter()
+    private let pasteTarget = PasteTarget()
     /// Timings and outcomes only, never what was said. Read with:
     /// log show --last 5m --predicate 'subsystem == "dev.hark.app"'
     private let log = Logger(subsystem: "dev.hark.app", category: "dictation")
@@ -95,6 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         switch action {
         case .start:
             targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
+            // Read the last paste's field back once, unless a paste is still on its way.
+            if settings.learnFromEdits, inFlight == 0 {
+                let target = pasteTarget
+                Task.detached { await target.readBackAndCount() }
+            }
             startedAt = Date()
             play(startSound)
             setIcon(recording: true)
@@ -159,6 +165,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     }
                     await TraceLog.shared.append(result.trace)
                     Inserter.paste(result.text)
+                    if settings.learnFromEdits {
+                        let target = pasteTarget
+                        let generation = await target.currentGeneration
+                        let pasted = result.text
+                        Task.detached { await target.capture(pasted: pasted, generation: generation) }
+                    }
                     history.append(.init(
                         id: entryID, date: Date(), raw: raw, text: result.text, app: targetApp,
                         seconds: Date().timeIntervalSince(startedAt), spoken: spoken))
