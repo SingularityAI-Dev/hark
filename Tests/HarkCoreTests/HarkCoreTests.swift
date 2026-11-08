@@ -270,3 +270,130 @@ import Testing
         #expect(!TextCleaner.isPlausibleRefinement(original: long, refined: "Book a room."))
     }
 }
+
+@Suite struct PolishTraceTests {
+    @Test func roundTripsAndEncodesEnumsAsStrings() throws {
+        let trace = PolishTrace(
+            entryID: UUID(), winner: .server, skipped: nil, shiftFlipped: true, totalMilliseconds: 1200,
+            contenders: [.init(name: "server", outcome: .answered, milliseconds: 1100),
+                         .init(name: "on-device", outcome: .notStarted, milliseconds: 0)],
+            serverModel: "gpt-oss-20b", transcribeMilliseconds: 300)
+        let data = try JSONEncoder().encode(trace)
+        let json = String(decoding: data, as: UTF8.self)
+        #expect(json.contains("\"winner\":\"server\""))
+        #expect(json.contains("\"outcome\":\"answered\""))
+        #expect(try JSONDecoder().decode(PolishTrace.self, from: data) == trace)
+    }
+
+    @Test func aLineMissingOptionalFieldsDecodesWithDefaults() throws {
+        let id = UUID()
+        let line = #"{"entryID":"\#(id.uuidString)","winner":"rules","contenders":[{"name":"server","outcome":"deadline"}]}"#
+        let trace = try JSONDecoder().decode(PolishTrace.self, from: Data(line.utf8))
+        #expect(trace.entryID == id)
+        #expect(trace.winner == .rules)
+        #expect(trace.contenders.first?.outcome == .deadline)
+        #expect(trace.contenders.first?.milliseconds == 0)
+        #expect(!trace.late && !trace.orphanInFlight && !trace.shiftFlipped)
+        #expect(trace.learnedIDs.isEmpty)
+        #expect(trace.skipped == nil)
+    }
+
+    @Test func refusesALineWithoutTheRequiredFields() {
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(PolishTrace.self, from: Data(#"{"winner":"rules"}"#.utf8)) }
+    }
+}
+
+@Suite struct PlausibilityReasonTests {
+    @Test func namesEachFailure() {
+        #expect(TextCleaner.plausibilityFailure(original: "one two three", refined: "") == "empty")
+        #expect(TextCleaner.plausibilityFailure(
+            original: "please book the room on the third floor for the whole team from nine until twelve",
+            refined: "Book a room.") == "too short")
+        #expect(TextCleaner.plausibilityFailure(
+            original: "call me", refined: "Please call me back as soon as you possibly can today, thanks.") == "too long")
+        #expect(TextCleaner.plausibilityFailure(
+            original: "what is the capital of France and how far is it from London",
+            refined: "Paris is the capital and London is two hours away by fast train.") == "too few spoken words")
+    }
+
+    @Test func passesWhatTheBoolGuardPasses() {
+        let original = "let's meet on Tuesday no wait Wednesday at three in the afternoon"
+        let refined = "Let's meet on Wednesday at three in the afternoon."
+        #expect(TextCleaner.plausibilityFailure(original: original, refined: refined) == nil)
+        #expect(TextCleaner.isPlausibleRefinement(original: original, refined: refined))
+    }
+
+    @Test func spokenWordsIncludeJoinedRuns() {
+        let spoken = TextCleaner.spokenWords("single source one word")
+        #expect(spoken.contains("singlesource"))
+        #expect(spoken.contains("sourceoneword"))
+        #expect(!spoken.contains("singleword"))
+    }
+
+    @Test func recognisesFillers() {
+        #expect(TextCleaner.isFiller("um"))
+        #expect(TextCleaner.isFiller("#Ah,"))
+        #expect(TextCleaner.isFiller("like"))
+        #expect(!TextCleaner.isFiller("umbrella"))
+        #expect(!TextCleaner.isFiller("aha"))
+    }
+}
+
+@Suite struct DictationSnapshotTests {
+    @Test func decodesTheExampleAndParsesCorrections() throws {
+        let json = #"{"dictionary":["SingleSource"],"correctionsText":"tasting = testing","polishServerURL":null,"polishServerModel":null}"#
+        let snapshot = try JSONDecoder().decode(DictationSnapshot.self, from: Data(json.utf8))
+        #expect(snapshot.dictionary == ["SingleSource"])
+        #expect(snapshot.corrections == [.init(heard: "tasting", meant: "testing")])
+        #expect(snapshot.polishServerURL == nil)
+    }
+
+    @Test func splitsDictionaryTextLikeSettings() {
+        let snapshot = DictationSnapshot(dictionaryText: " Ruen \n\nZernio\n", correctionsText: "", polishServerURL: nil, polishServerModel: nil)
+        #expect(snapshot.dictionary == ["Ruen", "Zernio"])
+    }
+
+    @Test func toleratesMissingFields() throws {
+        let snapshot = try JSONDecoder().decode(DictationSnapshot.self, from: Data("{}".utf8))
+        #expect(snapshot.dictionary.isEmpty && snapshot.correctionsText.isEmpty)
+    }
+}
+
+@Suite struct EditDistanceTests {
+    @Test func countsEdits() {
+        #expect(editDistance("ruin", "ruen") == 1)
+        #expect(editDistance("elser", "elsa") == 2)
+        #expect(editDistance("", "abc") == 3)
+        #expect(editDistance(["a", "b"], ["a", "b"]) == 0)
+    }
+
+    @Test func alignsCommonSubsequence() {
+        let pairs = longestCommonSubsequence(["a", "x", "b", "c"], ["a", "b", "y", "c"])
+        #expect(pairs.map { $0.0 } == [0, 2, 3])
+        #expect(pairs.map { $0.1 } == [0, 1, 3])
+        #expect(longestCommonSubsequence([Int](), [1]).isEmpty)
+    }
+}
+
+@Suite struct NearCopyTests {
+    let pasted = "Ask Elser to send the forms before Friday."
+
+    @Test func unchangedWhenTheTextIsStillThere() {
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "notes here. Ask Elser to send the forms before Friday. And then") == .unchanged)
+    }
+
+    @Test func countsOneAndTwoChangedWords() {
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "Ask Elsa to send the forms before Friday.") == .changed(count: 1))
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "Ask Elsa to send the forms before Thursday.") == .changed(count: 2))
+    }
+
+    @Test func threeChangesOrGoneIsDifferent() {
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "Ask Elsa to post the forms before Thursday.") == .different)
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "") == .different)
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "something else entirely was typed here") == .different)
+    }
+
+    @Test func cutWordsAtTheWindowEdgesAreIgnored() {
+        #expect(EditDiff.nearCopy(pasted: pasted, readBack: "ffee later. Ask Elser to send the forms before Friday. Then we mee") == .unchanged)
+    }
+}
