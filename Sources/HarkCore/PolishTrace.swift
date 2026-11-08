@@ -3,12 +3,12 @@ import Foundation
 /// What happened to one dictation's polish: which path produced the paste, how each
 /// contender in the race did, and how long things took. Holds timings, outcomes and error
 /// types only, never what was said.
-public struct PolishTrace: Codable, Equatable {
-    public enum Path: String, Codable { case server, onDevice, rules }
-    public enum Skip: String, Codable { case shift, settingOff, tooShort, noModel }
-    public enum Outcome: String, Codable { case answered, rejected, error, deadline, notStarted, running, cancelled }
+public struct PolishTrace: Codable, Equatable, Sendable {
+    public enum Path: String, Codable, Sendable { case server, onDevice, rules }
+    public enum Skip: String, Codable, Sendable { case shift, settingOff, tooShort, noModel }
+    public enum Outcome: String, Codable, Sendable { case answered, rejected, error, deadline, notStarted, running, cancelled }
 
-    public struct Contender: Codable, Equatable {
+    public struct Contender: Codable, Equatable, Sendable {
         public var name: String
         public var outcome: Outcome
         public var milliseconds: Int

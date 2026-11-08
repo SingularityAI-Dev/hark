@@ -24,10 +24,7 @@ final class HistoryStore: ObservableObject {
     private let encoder = JSONEncoder()
 
     init() {
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("hark", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        fileURL = folder.appendingPathComponent("history.jsonl")
+        fileURL = HarkPaths.supportFolder.appendingPathComponent("history.jsonl")
         encoder.dateEncodingStrategy = .iso8601
 
         let decoder = JSONDecoder()
@@ -57,11 +54,13 @@ final class HistoryStore: ObservableObject {
     func clear() {
         entries = []
         try? FileManager.default.removeItem(at: fileURL)
+        Task { await TraceLog.shared.removeAll() }
     }
 
     func remove(_ id: Entry.ID) {
         entries.removeAll { $0.id == id }
         rewrite()
+        Task { await TraceLog.shared.remove(ids: [id]) }
     }
 
     /// Drops entries older than `days`; 0 keeps everything.
@@ -71,6 +70,8 @@ final class HistoryStore: ObservableObject {
         guard kept.count < entries.count else { return }
         entries = kept
         rewrite()
+        let ids = Set(kept.map(\.id))
+        Task { await TraceLog.shared.keep(ids: ids) }
     }
 
     private func rewrite() {

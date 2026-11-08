@@ -1,4 +1,5 @@
 import Foundation
+import HarkCore
 import Security
 
 /// An OpenAI-compatible chat server used for polish instead of Apple's on-device model,
@@ -9,15 +10,16 @@ struct PolishServer {
     var model: String
     var key: String?
 
-    /// The server from Settings, or from HARK_POLISH_URL, HARK_POLISH_MODEL and
-    /// HARK_POLISH_KEY when those are set (used by `make eval`). Nil means use Apple's model.
-    static var configured: PolishServer? {
+    /// The server for one dictation: HARK_POLISH_URL, HARK_POLISH_MODEL and HARK_POLISH_KEY
+    /// win when set (used by `make eval`); otherwise the snapshot's URL and model with the
+    /// key from the keychain. Nil means Apple's model only.
+    static func from(_ snapshot: DictationSnapshot) -> PolishServer? {
         let environment = ProcessInfo.processInfo.environment
-        let address = environment["HARK_POLISH_URL"] ?? Settings.shared.polishServerURL
+        let address = environment["HARK_POLISH_URL"] ?? snapshot.polishServerURL ?? ""
         guard let url = URL(string: address.trimmingCharacters(in: .whitespaces)), url.scheme != nil else { return nil }
-        let model = environment["HARK_POLISH_MODEL"] ?? Settings.shared.polishServerModel
+        let model = environment["HARK_POLISH_MODEL"] ?? snapshot.polishServerModel ?? ""
         return PolishServer(
-            baseURL: url, model: model.isEmpty ? "auto" : model,
+            baseURL: url, model: model.isEmpty ? "gpt-oss-20b" : model,
             key: environment["HARK_POLISH_KEY"] ?? Keychain.polishServerKey)
     }
 
@@ -25,7 +27,9 @@ struct PolishServer {
         let description: String
     }
 
-    func complete(instructions: String, prompt: String, timeout: TimeInterval = 10) async throws -> String {
+    /// The reply's text, and the model the server says answered (FreeLLMAPI may route a
+    /// request to a different upstream than the one asked for).
+    func complete(instructions: String, prompt: String, timeout: TimeInterval = 10) async throws -> (text: String, model: String?) {
         var request = URLRequest(url: baseURL.appendingPathComponent("chat/completions"), timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -52,7 +56,7 @@ struct PolishServer {
             let message = choices.first?["message"] as? [String: Any],
             let content = message["content"] as? String
         else { throw Failure(description: "polish server reply had no message") }
-        return content
+        return (content, body["model"] as? String)
     }
 }
 

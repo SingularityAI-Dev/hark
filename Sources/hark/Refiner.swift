@@ -15,7 +15,7 @@ enum Refiner {
     /// Below this many words the rule-based pass is enough and the model is skipped.
     static let modelThreshold = 3
 
-    static var modelAvailable: Bool { PolishServer.configured != nil || onDeviceModelAvailable }
+    static func modelAvailable(server: PolishServer?) -> Bool { server != nil || onDeviceModelAvailable }
 
     static var onDeviceModelAvailable: Bool {
         if case .available = SystemLanguageModel.default.availability { return true }
@@ -105,10 +105,9 @@ enum Refiner {
     /// that keeps the connection open (seen taking 34 s on 2026-10-20).
     static let deadline: Duration = .seconds(10)
 
-    private enum Outcome {
-        case answer(String?)
-        case deadline
-    }
+    /// How long a server request that lost the race may keep running, so its real time can
+    /// be recorded. The next dictation's server request cancels it sooner.
+    static let orphanCap: Duration = .seconds(30)
 
     /// Loads Apple's model while the user is still speaking, so it is warm if it is needed.
     static func prewarm(dictionary: [String]) {
@@ -116,66 +115,246 @@ enum Refiner {
         LanguageModelSession(instructions: instructions(dictionary: dictionary)).prewarm()
     }
 
-    static func refine(_ raw: String, dictionary: [String], useModel: Bool) async -> String {
-        let cleaned = TextCleaner.clean(raw)
-        guard useModel, modelAvailable, TextCleaner.wordCount(cleaned) >= modelThreshold else { return cleaned }
+    /// One contender's result as it reaches the race.
+    private struct Report: Sendable {
+        var name: String
+        var outcome: PolishTrace.Outcome
+        var milliseconds: Int
+        var detail: String?
+        var text: String?
+        var model: String?
+    }
+
+    private enum Event: Sendable {
+        case report(Report)
+        case started(String)
+        case deadline
+    }
+
+    /// The race's shared state. The server task and the race loop meet here under one lock,
+    /// so a server answer is either consumed by the race, or handed to the late-line sink,
+    /// never lost: if the race is already decided the server task sends it to the sink
+    /// itself; if not, it stores the report before yielding it, and the race, on finishing,
+    /// sends any stored report it did not consume.
+    private struct RaceFlags {
+        var finished = false
+        var winner = PolishTrace.Path.rules
+        var serverReport: Report?
+        var serverConsumed = false
+    }
+
+    private final class RaceState: @unchecked Sendable {
+        let lock = OSAllocatedUnfairLock(initialState: RaceFlags())
+    }
+
+    /// A server request that lost the race and is still running.
+    private struct Orphan {
+        var task: Task<Void, Never>
+        var entryID: UUID
+    }
+
+    private static let orphan = OSAllocatedUnfairLock<Orphan?>(initialState: nil)
+
+    private static let serverName = "server"
+    private static let onDeviceName = "on-device"
+
+    /// Cleans up `cleaned` with a language model when one is available and the dictation is
+    /// long enough, racing the server against Apple's model, and records what happened.
+    /// `skip` is set by the caller when polish is off for this dictation. `sink` receives a
+    /// late trace line when a losing server request finishes after the paste; it is nil in
+    /// the command-line tool, which keeps no trace file.
+    static func refine(
+        cleaned: String, entryID: UUID, dictionary: [String], hints: [String] = [],
+        server: PolishServer?, skip: PolishTrace.Skip?, shiftFlipped: Bool,
+        sink: (@Sendable (PolishTrace) -> Void)?
+    ) async -> RefineResult {
+        let start = ContinuousClock.now
+        // A request still running from the last dictation is cancelled before this one
+        // starts, so at most one is ever open.
+        let previous = orphan.withLock { state -> Orphan? in
+            defer { state = nil }
+            return state
+        }
+        previous?.task.cancel()
+        var trace = PolishTrace(entryID: entryID, winner: .rules, shiftFlipped: shiftFlipped, orphanInFlight: previous != nil)
+
+        func finish(_ text: String) -> RefineResult {
+            trace.totalMilliseconds = milliseconds(since: start)
+            return RefineResult(text: text, trace: trace)
+        }
+
+        if let skip {
+            trace.skipped = skip
+            return finish(cleaned)
+        }
+        guard modelAvailable(server: server) else {
+            trace.skipped = .noModel
+            return finish(cleaned)
+        }
+        guard TextCleaner.wordCount(cleaned) >= modelThreshold else {
+            trace.skipped = .tooShort
+            return finish(cleaned)
+        }
+
         let instructions = instructions(dictionary: dictionary)
-        let prompt = "<transcript>\n\(cleaned)\n</transcript>"
-        let server = PolishServer.configured
+        var prompt = "<transcript>\n\(cleaned)\n</transcript>"
+        if !hints.isEmpty { prompt += "\n<hints>\n" + hints.joined(separator: "\n") + "\n</hints>" }
+
         // Unstructured tasks rather than a task group: a group waits for every child before
         // it returns, and Apple's model does not stop generating when cancelled, so a group
         // would hold the paste until it finished (20 s seen under load on 2026-10-20).
-        let (outcomes, continuation) = AsyncStream.makeStream(of: Outcome.self)
-        var tasks: [Task<Void, Never>] = []
+        let (events, continuation) = AsyncStream.makeStream(of: Event.self)
+        let race = RaceState()
+        var contenders: [String: PolishTrace.Contender] = [:]
+        var startedAt: [String: ContinuousClock.Instant] = [:]
+        var serverTask: Task<Void, Never>?
+        var otherTasks: [Task<Void, Never>] = []
+
         if let server {
-            tasks.append(Task {
-                continuation.yield(.answer(await attempt("server") {
+            contenders[serverName] = .init(name: serverName, outcome: .running, milliseconds: 0)
+            startedAt[serverName] = start
+            serverTask = Task {
+                let began = ContinuousClock.now
+                let report = await attempt(serverName, began: began) {
                     try await server.complete(instructions: instructions, prompt: prompt)
-                }))
-            })
+                }
+                let decided = race.lock.withLock { flags -> PolishTrace.Path? in
+                    if flags.finished { return flags.winner }
+                    flags.serverReport = report
+                    return nil
+                }
+                if let decided {
+                    // The race was already decided: this is a late answer from an orphan.
+                    sink?(lateLine(report, entryID: entryID, winner: decided))
+                } else {
+                    continuation.yield(.report(report))
+                }
+            }
         }
         if onDeviceModelAvailable {
-            tasks.append(Task {
+            contenders[onDeviceName] = .init(name: onDeviceName, outcome: .notStarted, milliseconds: 0)
+            otherTasks.append(Task {
                 if server != nil {
                     try? await Task.sleep(for: serverHeadStart)
                     if Task.isCancelled { return }
                 }
-                continuation.yield(.answer(await attempt("on-device") {
+                continuation.yield(.started(onDeviceName))
+                let report = await attempt(onDeviceName, began: ContinuousClock.now) {
                     let session = LanguageModelSession(instructions: instructions)
-                    return try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy)).content
-                }))
+                    let reply = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy))
+                    return (reply.content, nil)
+                }
+                continuation.yield(.report(report))
             })
         }
-        tasks.append(Task {
+        otherTasks.append(Task {
             try? await Task.sleep(for: deadline)
             continuation.yield(.deadline)
         })
-        defer {
-            tasks.forEach { $0.cancel() }
-            continuation.finish()
-        }
-        var unanswered = tasks.count - 1
-        for await outcome in outcomes {
-            switch outcome {
-            case .answer(let output?) where TextCleaner.isPlausibleRefinement(original: cleaned, refined: output):
-                return output
-            case .answer:
+
+        var unanswered = contenders.count
+        var text = cleaned
+        loop: for await event in events {
+            switch event {
+            case .started(let name):
+                startedAt[name] = .now
+                contenders[name]?.outcome = .running
+            case .report(var report):
+                if report.name == serverName {
+                    race.lock.withLock { $0.serverConsumed = true }
+                    trace.serverModel = report.model ?? trace.serverModel
+                }
+                if report.outcome == .answered, let answer = report.text {
+                    if let failure = TextCleaner.plausibilityFailure(original: cleaned, refined: answer) {
+                        report.outcome = .rejected
+                        report.detail = failure
+                        log.error("\(report.name, privacy: .public) answer rejected: \(failure, privacy: .public)")
+                    } else {
+                        contenders[report.name] = .init(name: report.name, outcome: .answered, milliseconds: report.milliseconds)
+                        trace.winner = report.name == serverName ? .server : .onDevice
+                        text = answer
+                        break loop
+                    }
+                }
+                contenders[report.name] = .init(
+                    name: report.name, outcome: report.outcome, milliseconds: report.milliseconds, detail: report.detail)
                 unanswered -= 1
-                if unanswered == 0 { return cleaned }
+                if unanswered == 0 { break loop }
             case .deadline:
                 log.error("polish gave up after \(deadline.components.seconds, privacy: .public) s")
-                return cleaned
+                for (name, contender) in contenders where contender.outcome == .running {
+                    contenders[name]?.outcome = .deadline
+                    contenders[name]?.milliseconds = startedAt[name].map { milliseconds(since: $0) } ?? 0
+                }
+                break loop
             }
         }
-        return cleaned
+
+        // Decide the race and, if the server is still running, keep it as the orphan, in
+        // one critical section with the server task's check, so no answer is lost.
+        let winner = trace.winner
+        let serverHandle = serverTask
+        let (unconsumed, serverStillRunning) = race.lock.withLock { flags -> (Report?, Bool) in
+            flags.finished = true
+            flags.winner = winner
+            let unconsumed = flags.serverConsumed ? nil : flags.serverReport
+            let running = serverHandle != nil && flags.serverReport == nil
+            if running, let serverHandle {
+                orphan.withLock { $0 = Orphan(task: serverHandle, entryID: entryID) }
+            }
+            return (unconsumed, running)
+        }
+        // A server answer that arrived after the race was decided but before this point.
+        if let unconsumed { sink?(lateLine(unconsumed, entryID: entryID, winner: winner)) }
+        if serverStillRunning, let serverTask {
+            Task {
+                try? await Task.sleep(for: orphanCap - (ContinuousClock.now - start))
+                let mine = orphan.withLock { state -> Bool in
+                    guard state?.entryID == entryID else { return false }
+                    state = nil
+                    return true
+                }
+                if mine { serverTask.cancel() }
+            }
+        } else {
+            serverTask?.cancel()
+        }
+        // On-device answers that arrive after a server win are dropped; mark it cancelled.
+        for (name, contender) in contenders where name == onDeviceName && contender.outcome == .running {
+            contenders[name]?.outcome = .cancelled
+            contenders[name]?.milliseconds = startedAt[name].map { milliseconds(since: $0) } ?? 0
+        }
+        if contenders[serverName]?.outcome == .running {
+            contenders[serverName]?.milliseconds = milliseconds(since: start)
+        }
+        otherTasks.forEach { $0.cancel() }
+        continuation.finish()
+
+        trace.contenders = [serverName, onDeviceName].compactMap { contenders[$0] }
+        return finish(text)
     }
 
-    private static func attempt(_ name: String, _ body: () async throws -> String) async -> String? {
+    private static func lateLine(_ report: Report, entryID: UUID, winner: PolishTrace.Path) -> PolishTrace {
+        PolishTrace(
+            entryID: entryID, winner: winner,
+            contenders: [.init(name: report.name, outcome: report.outcome, milliseconds: report.milliseconds, detail: report.detail)],
+            serverModel: report.model, late: true)
+    }
+
+    private static func attempt(
+        _ name: String, began: ContinuousClock.Instant, _ body: () async throws -> (String, String?)
+    ) async -> Report {
         do {
-            return strip(try await body())
+            let (text, model) = try await body()
+            return Report(name: name, outcome: .answered, milliseconds: milliseconds(since: began), text: strip(text), model: model)
         } catch {
-            log.error("\(name, privacy: .public) polish failed: \(String(describing: error), privacy: .public)")
-            return nil
+            let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
+            if !cancelled {
+                log.error("\(name, privacy: .public) polish failed: \(String(describing: error), privacy: .public)")
+            }
+            return Report(
+                name: name, outcome: cancelled ? .cancelled : .error, milliseconds: milliseconds(since: began),
+                detail: cancelled ? nil : String(describing: type(of: error)))
         }
     }
 
@@ -189,4 +368,10 @@ enum Refiner {
         }
         return text
     }
+}
+
+/// The text to paste and what happened on the way.
+struct RefineResult {
+    var text: String
+    var trace: PolishTrace
 }

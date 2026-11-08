@@ -30,8 +30,8 @@ struct SettingsView: View {
 
             Section("Cleanup") {
                 Toggle("Polish every dictation with the on-device model", isOn: $settings.alwaysPolish)
-                    .disabled(!Refiner.modelAvailable)
-                Text(Refiner.modelAvailable
+                    .disabled(!Refiner.modelAvailable(server: PolishServer.from(settings.snapshot)))
+                Text(Refiner.modelAvailable(server: PolishServer.from(settings.snapshot))
                     ? "Fillers and repeats are always removed instantly. Polishing also drops what you take back (\"wait, sorry, it's the other one\") and half-finished phrases, and fixes punctuation. It adds about a second, more for long dictations. Tap Shift while dictating to switch it for that one."
                     : "Apple Intelligence is off or unsupported on this Mac, so only the instant cleanup runs.")
                     .font(.caption).foregroundStyle(.secondary)

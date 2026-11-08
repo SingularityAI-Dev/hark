@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var permissionTimer: Timer?
     private var muteWork: DispatchWorkItem?
     private var subscriptions: Set<AnyCancellable> = []
+    /// Dictations finished but not yet pasted. Read-back waits until this is zero, so it
+    /// never reads a field while another paste may be landing in it.
+    private var inFlight = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setIcon(recording: false)
@@ -50,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
         startHotkeysWhenTrusted()
         Task { await transcriber.prepare(locale: settings.locale) }
+        Task { await TraceLog.shared.load() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -107,7 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                         inputDeviceUID: settings.inputDeviceUID.isEmpty ? nil : settings.inputDeviceUID,
                         onLevel: { level in DispatchQueue.main.async { model.level = level } })
                     recording = true
-                    log.notice("microphone on after \(Self.milliseconds(since: began)) ms")
+                    log.notice("microphone on after \(milliseconds(since: began)) ms")
                 } catch {
                     fail(error)
                 }
@@ -122,8 +126,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             unmute()
             indicator.show(.processing)
             // Shift flips the setting for this one dictation.
-            let polish = settings.alwaysPolish != hotkeys.polishRequested
+            let shiftFlipped = hotkeys.polishRequested
+            let polish = settings.alwaysPolish != shiftFlipped
+            let skip: PolishTrace.Skip? = polish ? nil : (shiftFlipped ? .shift : .settingOff)
+            let snapshot = settings.snapshot
+            inFlight += 1
             enqueue { [self] in
+                defer { inFlight -= 1 }
                 guard recording else {
                     indicator.hide()
                     return
@@ -132,21 +141,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 do {
                     let began = ContinuousClock.now
                     let raw = try await transcriber.finish()
-                    log.notice("transcribed \(raw.count) characters in \(Self.milliseconds(since: began)) ms")
+                    let transcribed = milliseconds(since: began)
+                    log.notice("transcribed \(raw.count) characters in \(transcribed) ms")
                     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                         indicator.flash("Nothing heard", seconds: 1.5)
                         return
                     }
-                    let text = await Refiner.refine(
-                        TextCleaner.apply(settings.corrections, to: raw),
-                        dictionary: settings.dictionary, useModel: polish)
-                    guard !text.isEmpty else {
+                    let entryID = UUID()
+                    var result = await Dictation.process(
+                        raw: raw, entryID: entryID, snapshot: snapshot, server: PolishServer.from(snapshot),
+                        skip: skip, shiftFlipped: shiftFlipped,
+                        sink: { line in Task { await TraceLog.shared.appendLate(line) } })
+                    result.trace.transcribeMilliseconds = transcribed
+                    guard !result.text.isEmpty else {
                         indicator.hide()
                         return
                     }
-                    Inserter.paste(text)
+                    await TraceLog.shared.append(result.trace)
+                    Inserter.paste(result.text)
                     history.append(.init(
-                        date: Date(), raw: raw, text: text, app: targetApp,
+                        id: entryID, date: Date(), raw: raw, text: result.text, app: targetApp,
                         seconds: Date().timeIntervalSince(startedAt), spoken: spoken))
                     play(finishSound)
                     indicator.hide()
@@ -190,11 +204,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         muteWork?.cancel()
         muteWork = nil
         muter.restore()
-    }
-
-    private static func milliseconds(since start: ContinuousClock.Instant) -> Int {
-        let elapsed = ContinuousClock.now - start
-        return Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     private func pasteLast() {

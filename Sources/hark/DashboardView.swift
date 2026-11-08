@@ -357,6 +357,7 @@ private struct HistoryPage: View {
     @ObservedObject var settings: Settings
     @State private var query = ""
     @State private var confirmingClear = false
+    @State private var explained: Explained?
     private let calendar = Calendar.current
     private let retention: [(days: Int, label: String)] = [(0, "Forever"), (365, "1 year"), (90, "90 days"), (30, "30 days"), (7, "7 days")]
 
@@ -414,6 +415,12 @@ private struct HistoryPage: View {
                                     .contextMenu {
                                         Button("Copy") { copy(entry.text) }
                                         Button("Copy as heard") { copy(entry.raw) }
+                                        Button("Why this text?") {
+                                            Task {
+                                                let traces = await TraceLog.shared.traces(for: entry.id)
+                                                explained = Explained(id: entry.id, traces: traces)
+                                            }
+                                        }
                                         Divider()
                                         Button("Delete", role: .destructive) { history.remove(entry.id) }
                                     }
@@ -426,6 +433,7 @@ private struct HistoryPage: View {
             }
         }
         .padding(32)
+        .sheet(item: $explained) { TraceSheet(explained: $0) }
         .confirmationDialog("Delete all \(history.entries.count) dictations?", isPresented: $confirmingClear) {
             Button("Delete all", role: .destructive) { history.clear() }
         } message: {
@@ -451,6 +459,73 @@ private struct HistoryPage: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+private struct Explained: Identifiable {
+    let id: UUID
+    let traces: [PolishTrace]
+}
+
+/// What happened to one dictation's polish, from its trace lines.
+private struct TraceSheet: View {
+    let explained: Explained
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Why this text?").font(.title2.bold())
+            if let main = explained.traces.first(where: { !$0.late }) {
+                LabeledContent("Pasted from", value: pathLabel(main.winner))
+                if let skip = main.skipped { LabeledContent("Polish skipped", value: skipLabel(skip)) }
+                if let model = main.serverModel { LabeledContent("Server model", value: model) }
+                LabeledContent("Transcription", value: "\(main.transcribeMilliseconds) ms")
+                LabeledContent("Polish", value: "\(main.totalMilliseconds) ms")
+                if main.orphanInFlight { Text("A slow server request from the previous dictation was still running.").font(.callout).foregroundStyle(.secondary) }
+                Divider()
+                ForEach(Array(main.contenders.enumerated()), id: \.offset) { _, contender in
+                    contenderRow(contender, late: false)
+                }
+                ForEach(Array(explained.traces.filter(\.late).enumerated()), id: \.offset) { _, line in
+                    ForEach(Array(line.contenders.enumerated()), id: \.offset) { _, contender in
+                        contenderRow(contender, late: true)
+                    }
+                }
+            } else {
+                Text("No trace for this dictation. Dictations before this version were not traced.")
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+    }
+
+    private func contenderRow(_ contender: PolishTrace.Contender, late: Bool) -> some View {
+        var text = "\(contender.outcome.rawValue), \(contender.milliseconds) ms"
+        if let detail = contender.detail { text += " (\(detail))" }
+        if contender.revertedRegions > 0 { text += ", \(contender.revertedRegions) rewrite(s) reverted" }
+        return LabeledContent(late ? "\(contender.name), after the paste" : contender.name, value: text)
+    }
+
+    private func pathLabel(_ path: PolishTrace.Path) -> String {
+        switch path {
+        case .server: "Polish server"
+        case .onDevice: "Apple's on-device model"
+        case .rules: "Rule cleanup only"
+        }
+    }
+
+    private func skipLabel(_ skip: PolishTrace.Skip) -> String {
+        switch skip {
+        case .shift: "Shift was pressed"
+        case .settingOff: "Polish is off in Settings"
+        case .tooShort: "Under 3 words"
+        case .noModel: "No model available"
+        }
     }
 }
 
