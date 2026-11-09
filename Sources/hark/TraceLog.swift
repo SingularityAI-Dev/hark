@@ -31,8 +31,8 @@ actor TraceLog {
     }
 
     /// Written once the dictation's main line exists. A late answer can arrive before the
-    /// main line (the race decides, then the paste writes it), so it waits briefly; one for
-    /// a deleted entry is dropped by the delete paths.
+    /// main line (the race decides, then the paste writes it), so it waits in a buffer of
+    /// at most 20; one whose entry is never written, or was deleted, is never written.
     func appendLate(_ trace: PolishTrace) {
         load()
         if knownIDs.contains(trace.entryID) {

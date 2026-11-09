@@ -169,8 +169,7 @@ enum Refiner {
         sink: (@Sendable (PolishTrace) -> Void)?
     ) async -> RefineResult {
         let start = ContinuousClock.now
-        // A request still running from the last dictation is cancelled before this one
-        // starts, so at most one is ever open.
+        // Whether a server request from an earlier dictation is still running.
         let orphanInFlight = orphan.withLock { $0 != nil }
         var trace = PolishTrace(entryID: entryID, winner: .rules, shiftFlipped: shiftFlipped, orphanInFlight: orphanInFlight)
 
