@@ -171,12 +171,8 @@ enum Refiner {
         let start = ContinuousClock.now
         // A request still running from the last dictation is cancelled before this one
         // starts, so at most one is ever open.
-        let previous = orphan.withLock { state -> Orphan? in
-            defer { state = nil }
-            return state
-        }
-        previous?.task.cancel()
-        var trace = PolishTrace(entryID: entryID, winner: .rules, shiftFlipped: shiftFlipped, orphanInFlight: previous != nil)
+        let orphanInFlight = orphan.withLock { $0 != nil }
+        var trace = PolishTrace(entryID: entryID, winner: .rules, shiftFlipped: shiftFlipped, orphanInFlight: orphanInFlight)
 
         func finish(_ text: String) -> RefineResult {
             trace.totalMilliseconds = milliseconds(since: start)
@@ -211,6 +207,12 @@ enum Refiner {
         var otherTasks: [Task<Void, Never>] = []
 
         if let server {
+            // A request still running from an earlier dictation is cancelled before this one
+            // starts, so at most one is ever open.
+            orphan.withLock { state -> Orphan? in
+                defer { state = nil }
+                return state
+            }?.task.cancel()
             contenders[serverName] = .init(name: serverName, outcome: .running, milliseconds: 0)
             startedAt[serverName] = start
             serverTask = Task {
@@ -224,7 +226,9 @@ enum Refiner {
                     return nil
                 }
                 if let decided {
-                    // The race was already decided: this is a late answer from an orphan.
+                    // The race was already decided: this is a late answer from an orphan,
+                    // which is no longer running.
+                    orphan.withLock { if $0?.entryID == entryID { $0 = nil } }
                     sink?(lateLine(report, entryID: entryID, winner: decided))
                 } else {
                     continuation.yield(.report(report))
@@ -309,12 +313,8 @@ enum Refiner {
         if serverStillRunning, let serverTask {
             Task {
                 try? await Task.sleep(for: orphanCap - (ContinuousClock.now - start))
-                let mine = orphan.withLock { state -> Bool in
-                    guard state?.entryID == entryID else { return false }
-                    state = nil
-                    return true
-                }
-                if mine { serverTask.cancel() }
+                orphan.withLock { if $0?.entryID == entryID { $0 = nil } }
+                serverTask.cancel()  // harmless if it already finished
             }
         } else {
             serverTask?.cancel()

@@ -124,7 +124,16 @@ actor PasteTarget {
         AXUIElementSetMessagingTimeout(record.element, 0.25)
         var total: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(record.element, kAXNumberOfCharactersAttribute as CFString, &total)
-        guard status == .success, let count = total as? Int else { return .failure(Failure(outcome: outcome(for: status))) }
+        let count: Int
+        if status == .success, let reported = total as? Int {
+            count = reported
+        } else if status == .invalidUIElement || status == .cannotComplete {
+            return .failure(Failure(outcome: outcome(for: status)))
+        } else if let value = string(record.element, kAXValueAttribute) {
+            count = value.utf16.count  // apps that do not report a character count
+        } else {
+            return .failure(Failure(outcome: .noElement))
+        }
         let start = max(0, record.caret - record.pasted.utf16.count - 40)
         let end = min(count, record.caret + 120)
         guard end > start else { return .failure(Failure(outcome: .different)) }

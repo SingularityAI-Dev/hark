@@ -9,6 +9,8 @@ actor TraceLog {
 
     private let fileURL = HarkPaths.supportFolder.appendingPathComponent("polish.jsonl")
     private var knownIDs: Set<UUID> = []
+    /// Late lines that arrived before their dictation's main line; written right after it.
+    private var pending: [PolishTrace] = []
     private var loaded = false
     private let encoder = JSONEncoder()
 
@@ -23,14 +25,22 @@ actor TraceLog {
         load()
         knownIDs.insert(trace.entryID)
         write(trace)
+        let waiting = pending.filter { $0.entryID == trace.entryID }
+        pending.removeAll { $0.entryID == trace.entryID }
+        waiting.forEach(write)
     }
 
-    /// Dropped unless the dictation's main line exists, so a late answer for a deleted
-    /// entry leaves nothing behind.
+    /// Written once the dictation's main line exists. A late answer can arrive before the
+    /// main line (the race decides, then the paste writes it), so it waits briefly; one for
+    /// a deleted entry is dropped by the delete paths.
     func appendLate(_ trace: PolishTrace) {
         load()
-        guard knownIDs.contains(trace.entryID) else { return }
-        write(trace)
+        if knownIDs.contains(trace.entryID) {
+            write(trace)
+        } else {
+            pending.append(trace)
+            if pending.count > 20 { pending.removeFirst(pending.count - 20) }
+        }
     }
 
     func traces(for id: UUID) -> [PolishTrace] {
@@ -40,17 +50,20 @@ actor TraceLog {
     func remove(ids: Set<UUID>) {
         load()
         knownIDs.subtract(ids)
-        rewrite(readAll().filter { !ids.contains($0.entryID) })
+        pending.removeAll { ids.contains($0.entryID) }
+        rewrite { !ids.contains($0) }
     }
 
     func keep(ids: Set<UUID>) {
         load()
         knownIDs.formIntersection(ids)
-        rewrite(readAll().filter { ids.contains($0.entryID) })
+        pending.removeAll { !ids.contains($0.entryID) }
+        rewrite { ids.contains($0) }
     }
 
     func removeAll() {
         knownIDs = []
+        pending = []
         try? FileManager.default.removeItem(at: fileURL)
     }
 
@@ -72,11 +85,15 @@ actor TraceLog {
         return contents.split(separator: "\n").compactMap { try? decoder.decode(PolishTrace.self, from: Data($0.utf8)) }
     }
 
-    private func rewrite(_ traces: [PolishTrace]) {
+    /// Keeps lines whose entry id passes `keep`, byte for byte; a line that cannot be
+    /// decoded (a partial write, or a newer format) is kept rather than deleted.
+    private func rewrite(keep: (UUID) -> Bool) {
+        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else { return }
+        let decoder = JSONDecoder()
         var data = Data()
-        for trace in traces {
-            guard let line = try? encoder.encode(trace) else { continue }
-            data.append(line)
+        for line in contents.split(separator: "\n") {
+            if let trace = try? decoder.decode(PolishTrace.self, from: Data(line.utf8)), !keep(trace.entryID) { continue }
+            data.append(Data(line.utf8))
             data.append(0x0A)
         }
         try? data.write(to: fileURL, options: .atomic)

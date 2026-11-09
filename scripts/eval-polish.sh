@@ -8,7 +8,10 @@ pass=0; total=0
 while IFS=$'\t' read -r raw keep drop; do
   [[ -z "$raw" || "$raw" == \#* ]] && continue
   total=$((total + 1))
-  out="$("$bin" --refine "$raw" 2>/tmp/hark-eval-time)"
+  # Apple's model alone unless HARK_POLISH_URL is set; --refine otherwise reads the app's
+  # own server setting.
+  if [ -n "${HARK_POLISH_URL:-}" ]; then mode=(); else mode=(--device-only); fi
+  out="$("$bin" --refine "${mode[@]}" "$raw" 2>/tmp/hark-eval-time)"
   ms="$(grep -o '[0-9]* ms' /tmp/hark-eval-time)"
   lower="$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
   problems=""

@@ -163,8 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                         indicator.hide()
                         return
                     }
-                    await TraceLog.shared.append(result.trace)
                     Inserter.paste(result.text)
+                    await TraceLog.shared.append(result.trace)
                     if settings.learnFromEdits {
                         let target = pasteTarget
                         let generation = await target.currentGeneration

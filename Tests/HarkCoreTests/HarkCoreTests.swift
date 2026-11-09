@@ -393,6 +393,12 @@ import Testing
         #expect(EditDiff.nearCopy(pasted: pasted, readBack: "something else entirely was typed here") == .different)
     }
 
+    @Test func earlierTextSharingWordsIsNotAnEdit() {
+        #expect(EditDiff.nearCopy(pasted: "I think it's fine.", readBack: "I think we should go. I think it's fine.") == .unchanged)
+        #expect(EditDiff.nearCopy(pasted: "The meeting is on Tuesday.", readBack: "Send it to the team. The meeting is on Tuesday.") == .unchanged)
+        #expect(EditDiff.nearCopy(pasted: "The meeting is on Tuesday.", readBack: "Send it to the team. The meeting is on Thursday.") == .changed(count: 1))
+    }
+
     @Test func cutWordsAtTheWindowEdgesAreIgnored() {
         #expect(EditDiff.nearCopy(pasted: pasted, readBack: "ffee later. Ask Elser to send the forms before Friday. Then we mee") == .unchanged)
     }
