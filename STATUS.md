@@ -1,22 +1,19 @@
 # Status
 
-> Updated: 2026-10-26
+> Updated: 2026-11-09
 
 ## Where we are
-hark is installed at `/Applications/hark.app` and in daily use. Polish goes to a native FreeLLMAPI on `localhost:3001` with model `gpt-oss-20b` (Groq), low reasoning effort, Apple's model as backup after 2.5 s and a 10 s ceiling. `main` is at `1a50086`; the one uncommitted change is the request tuning in `Sources/hark/PolishServer.swift`, which is already in the installed build.
+Phase 1 of the learning and accuracy design (`docs/designs/hark-learning-and-accuracy.md`) is built and installed from branch `learning-and-accuracy` (HEAD `60d8ff5`, not pushed): every dictation writes a polish trace to `polish.jsonl` ("Why this text?" in History), and hark counts per app whether a paste can be read back (`readback-counts.json`, no text stored). Two fresh-context reviews done; 50 tests pass, `make verify` 3 of 3, footprint 15 MB. Learning from edits is being redesigned with EGM because Terminal turned out to expose pasted text.
 
 ## Recent
-- 2026-10-21 to 2026-10-26: real waits (`seconds - spoken`) monitored every 10 minutes. Every dictation waited 5.4 s or less, none near the ceiling; the last 11 (24 to 25 October) had a median of 1.57 s and a max of 4.45 s, all served by Groq.
-- 2026-10-22: FreeLLMAPI moved out of Docker into a LaunchAgent. Cloudflare Workers AI measured for the Windows build: `@cf/openai/gpt-oss-20b` 3.5 s on a 98-word dictation against 1.1 s for Groq via FreeLLMAPI, so the Mac stays on FreeLLMAPI.
-- 2026-10-21: pinned `gpt-oss-20b` with `reasoning_effort: low` and `max_tokens: 4096`. Without them gpt-oss spent its output cap on reasoning and long dictations hit the ceiling; `auto` wandered to upstreams taking 10 s or more.
+- 2026-11-09: first read-back test in Terminal detected a one-word edit (brine to Bryne), contradicting the design's assumption that Terminal gives no signal. Rainier presses Enter straight after a fix, so the next read-back found the line gone. EGM brainstorm brief for learning from edits written (`concepts_brief.md`, repo root, untracked); hypothesis confirmed, Goldfish review not yet run.
+- 2026-11-08: design approved after EGM brainstorm, draft and 9-stage Goldfish review; baseline in `~/hark-baseline/` (pinned binary, frozen history of 531 entries, `report-before.txt`).
+- 2026-11-08: history replay: up to 241 of 531 pastes were rule cleanup only (polish fell back), 49 pasted words carry a leaked `#`, 0 re-dictations; the "all 3 / all 4" repair reached the model and was kept.
 
 ## Next
-- Commit the `PolishServer.swift` change, then update CLAUDE.md and AGENTS.md, which still describe model `auto` and Docker.
-- FreeLLMAPI sometimes routes `gpt-oss-20b` to NVIDIA, which hangs to the ceiling. Fix: disable the `nvidia` / `openai/gpt-oss-20b` row via `freellmapi.config.json` and restart; recheck after a catalog refresh.
-- Quit Docker Desktop; its container still holds `127.0.0.1:3001`, harmless only because `localhost` resolves to `::1` first.
-- Windows build: bake the Cloudflare Workers AI endpoint and token into `windows/build.rs`; never run on Windows yet.
-- Explain the 2 to 3.6 s of in-app time beyond server latency; hark's `log.notice` stage timings do not reach `log show`.
-- Rerun `make eval` after the formatting change; Apple's backup is too slow on long inputs.
-- Recover mode for slurred speech: plan in `~/.claude/plans/we-need-to-improve-enumerated-orbit.md`, not started.
-- Still owed: insertion checks in an Electron app and a browser field, microphone picker test, friend's macOS version (needs 26).
-- Known limits: paste uses a fixed V key code; "nodes" heard as "notes" is not repaired; a spoken email address can gain a hyphen.
+- Learning from edits: resume EGM brainstorm Step 2 (Goldfish review) on `concepts_brief.md`, then `egm-draft` and `egm-review`, then build. Hypothesis: read back on Enter as well as Fn; search the field's recent text; save fixes to the Dictionary; non-words replaced, real words hinted then replaced after a second identical fix; skip shell-prompt lines and code.
+- Let Phase 1 traces run two weeks, then `scripts/history-report.py --traces` sets the Goal 2 fallback target.
+- Phase 3 (token strip, repair rule, edit guard, labelled eval) can be built any time.
+- Check whether the per-dictation keychain read explains the 2 to 3.6 s of unexplained in-app time (compare `seconds - spoken` with trace times).
+- Before any push to `SingularityAI-Dev/hark`: the design and review files name third parties (Ruen, Elsa) and quote dictations.
+- Still open from October: disable FreeLLMAPI's NVIDIA gpt-oss-20b row; quit Docker Desktop; Windows build endpoint; CLAUDE.md and AGENTS.md still describe model `auto` and Docker.

@@ -2,6 +2,10 @@
 
 > Last 20 changes. Full history in git.
 
+- 2026-11-09: Every dictation records a polish trace (path, each contender's outcome and time, rejection reason, server model) in `polish.jsonl`; History gains "Why this text?"; hark counts per app whether a paste can be read back and whether one or two words changed, storing no text (`e231c2c`, `93f9397`, fixes `1a9d384`, `60d8ff5`)
+- 2026-11-09: First read-back test: Terminal exposes pasted text and a one-word edit was detected (brine to Bryne); learning from edits is being designed next
+- 2026-11-08: Learning and accuracy design approved after EGM brainstorm, draft and 9-stage review (`docs/designs/hark-learning-and-accuracy.md`, `1d7f8a9`); `scripts/history-report.py` baseline: up to 241 of 531 pastes were rule cleanup only, 49 pasted words carry a leaked `#`, 0 re-dictations (`a2e7ee9`)
+- 2026-11-08: Polish request tuning (`reasoning_effort: low`, `max_tokens: 4096`) committed (`b0d9d94`)
 - 2026-10-22: FreeLLMAPI moved from Docker to a native LaunchAgent (`com.rainier.freellmapi`, port 3001); hark's keychain key updated to the new instance
 - 2026-10-21: Polish requests send `reasoning_effort: low` and `max_tokens: 4096`, and the polish model is pinned to `gpt-oss-20b` instead of `auto`; long dictations no longer hit the 10 s ceiling. Installed, not yet committed
 - 2026-10-20: Spoken formatting instructions are applied, not typed: "single source, one word, with a capital S" pastes as "SingleSource"; the guard accepts joined runs of spoken words
@@ -18,5 +22,3 @@
 - 2026-10-13: Other audio is muted while dictating and restored afterwards, with a Settings toggle (`804cc31`)
 - 2026-10-13: Fixed a permanent "Cleaning up" hang after a key press shorter than the first microphone buffer; every finalise now has a 10 s deadline (`804cc31`)
 - 2026-10-13: `make install` sets the macOS globe key to Do Nothing and restarts `TextInputSwitcher`, so Fn no longer opens the emoji picker (`804cc31`)
-- 2026-10-13: Timing-only logging under subsystem `dev.hark.app` (`804cc31`)
-- 2026-10-13: First version: menu bar dictation app on Apple's on-device speech recogniser, rule-based cleanup, opt-in model polish (`2ee4fda`)
