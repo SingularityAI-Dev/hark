@@ -185,9 +185,11 @@ actor PasteTarget {
                 count(key: prefix + "readFail", bundleID: record.bundleID, file: probeURL)
             case .success(let text):
                 var flags = ["readOk", text.utf16.count < 500 ? "len.0to500" : "len.500to2000"]
-                switch EditDiff.nearCopy(pasted: record.pasted, readBack: text) {
+                // The same aligner the learning path uses: it strips the box-drawing frame and
+                // prompt marks that Claude Code draws, which the Phase 1 comparison does not.
+                switch EditPairs.align(pasted: record.pasted, readBack: text) {
                 case .unchanged: flags.append("changes.0")
-                case .changed(let changes): flags.append(changes == 1 ? "changes.1" : "changes.2plus")
+                case .pairs(let pairs, _): flags.append(pairs.count == 1 ? "changes.1" : "changes.2plus")
                 case .different: flags.append("changes.2plus")
                 }
                 if let after = EditDiff.wordsAfterBestStretch(pasted: record.pasted, readBack: text),
