@@ -10,6 +10,8 @@ EXPECTED := please send the notes to the whole team before friday
 SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development|Developer ID Application/ {print $$2; exit}')
 SIGN_ID := $(if $(SIGN_ID),$(SIGN_ID),-)
 
+LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
 .PHONY: build app install test verify eval clean
 
 build:
@@ -22,6 +24,9 @@ app: build
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	cp Resources/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	codesign --force --sign "$(SIGN_ID)" $(APP)
+	@# Keep Spotlight and Launchpad from listing this build copy beside /Applications/hark.app.
+	touch build/.metadata_never_index
+	-$(LSREGISTER) -u $(APP)
 	@echo "built $(APP), signed with: $(SIGN_ID)"
 
 # Fn pressed on its own opens the macOS emoji picker, which then also swallows the pasted
