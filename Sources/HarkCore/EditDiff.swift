@@ -36,20 +36,38 @@ public enum EditDiff {
         return changes == 0 ? .unchanged : .changed(count: changes)
     }
 
+    /// How many words of `readBack` follow the best-matching stretch (the later stretch wins
+    /// a tie), or nil when either text has no words. Zero or a few means the paste is the last
+    /// thing on screen; many means something was typed or drawn after it.
+    public static func wordsAfterBestStretch(pasted: String, readBack: String) -> Int? {
+        let pattern = words(pasted), text = words(readBack)
+        guard !pattern.isEmpty, !text.isEmpty else { return nil }
+        let row = alignmentTable(pattern, in: text)[pattern.count]
+        guard let best = row.min(), let end = row.lastIndex(of: best) else { return nil }
+        return text.count - end
+    }
+
+    /// Full alignment table of `pattern` against `text`, free start and end in `text`:
+    /// `table[i][j]` is the fewest changes to match the first `i` pattern words against a
+    /// stretch of `text` that ends after word `j`. Row 0 is all zeros (the stretch may start
+    /// anywhere); column 0 holds `i` (every pattern word missing).
+    internal static func alignmentTable(_ pattern: [String], in text: [String]) -> [[Int]] {
+        var table = [[Int]](repeating: [Int](repeating: 0, count: text.count + 1), count: pattern.count + 1)
+        for i in 0..<pattern.count + 1 { table[i][0] = i }
+        guard !pattern.isEmpty, !text.isEmpty else { return table }
+        for i in 1...pattern.count {
+            for j in 1...text.count {
+                let substitution = table[i - 1][j - 1] + (pattern[i - 1] == text[j - 1] ? 0 : 1)
+                table[i][j] = min(table[i - 1][j] + 1, table[i][j - 1] + 1, substitution)
+            }
+        }
+        return table
+    }
+
     /// Edit distance between `pattern` and the closest stretch of `text` (free start and end
-    /// in `text`).
+    /// in `text`): the minimum of the table's last row.
     static func bestStretchDistance(_ pattern: [String], in text: [String]) -> Int {
         guard !text.isEmpty else { return pattern.count }
-        var previous = [Int](repeating: 0, count: text.count + 1)
-        var current = previous
-        for i in 1...pattern.count {
-            current[0] = i
-            for j in 1...text.count {
-                let substitution = previous[j - 1] + (pattern[i - 1] == text[j - 1] ? 0 : 1)
-                current[j] = min(previous[j] + 1, current[j - 1] + 1, substitution)
-            }
-            swap(&previous, &current)
-        }
-        return previous.min() ?? pattern.count
+        return alignmentTable(pattern, in: text)[pattern.count].min() ?? pattern.count
     }
 }

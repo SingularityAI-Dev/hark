@@ -8,4 +8,7 @@ public enum HarkPaths {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }
+
+    /// Words learned from the speaker's edits (Phase B reads and writes it).
+    public static var learnedFile: URL { supportFolder.appendingPathComponent("learned.json") }
 }

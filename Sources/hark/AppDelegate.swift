@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         hotkeys.trigger = settings.triggerKey
         hotkeys.onAction = { [weak self] action in self?.handle(action) }
         hotkeys.onPasteLast = { [weak self] in self?.pasteLast() }
+        hotkeys.onReturn = { [weak self] in self?.returnPressed() }
         hotkeys.onPolishRequested = { [weak self] in
             guard let self else { return }
             indicator.model.polish = !settings.alwaysPolish
@@ -92,14 +93,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
+    /// Return was pressed. Only starts a task: the event tap must never wait on Accessibility.
+    private func returnPressed() {
+        guard settings.learnFromEdits, inFlight == 0 else { return }
+        let target = pasteTarget
+        let probing = settings.readbackProbe
+        Task.detached { [weak self] in
+            let focus = PasteTarget.focusedElement()
+            if probing {
+                guard let record = await target.peek(focused: focus) else { return }
+                await target.probe(record, after: [.milliseconds(100), .milliseconds(300), .milliseconds(600), .milliseconds(1000)])
+                return
+            }
+            guard let record = await target.claim(trigger: .enter, focused: focus) else { return }
+            try? await Task.sleep(for: PasteTarget.readDelay)
+            let result = await target.read(record, trigger: .enter)
+            await self?.learnFromRead(result, record: record, trigger: .enter)
+        }
+    }
+
+    /// Phase A coordinator: counts what the read-back found and runs the pair finder and the
+    /// filter as a dry run. Nothing is stored, applied or shown, and the read text is dropped
+    /// when this returns.
+    private func learnFromRead(
+        _ result: Result<PasteTarget.ReadResult, PasteTarget.Failure>, record: PasteTarget.Record,
+        trigger: PasteTarget.Trigger
+    ) async {
+        let target = pasteTarget
+        let prefix = trigger == .enter ? "enter." : ""
+        let read: PasteTarget.ReadResult
+        switch result {
+        case .failure(let failure):
+            await target.count(key: prefix + failure.outcome.rawValue, bundleID: record.bundleID)
+            return
+        case .success(let value):
+            read = value
+        }
+        let outcome: PasteTarget.Outcome
+        switch EditDiff.nearCopy(pasted: record.pasted, readBack: read.text) {
+        case .unchanged: outcome = .unchanged
+        case .changed: outcome = .changed1or2
+        case .different: outcome = .different
+        }
+        // Return in an app where it is a newline: the paste is still there untouched, so keep
+        // the record for the Fn trigger and count nothing (one count per paste).
+        if trigger == .enter, outcome == .unchanged {
+            await target.release(record)
+            return
+        }
+        await target.count(key: prefix + outcome.rawValue, bundleID: record.bundleID)
+        guard case .pairs(let pairs, let line) = EditPairs.align(pasted: record.pasted, readBack: read.text) else { return }
+        let localeID = settings.localeID
+        for pair in pairs {
+            let verdict = LearnFilter.judge(
+                pair: pair, raw: record.raw, line: line, isWord: { Self.isDictionaryWord($0, localeID: localeID) }, learned: [])
+            switch verdict {
+            case .learnNow: await target.count(key: "would.learnNow", bundleID: record.bundleID)
+            case .waitForSecond: await target.count(key: "would.wait", bundleID: record.bundleID)
+            case .reject(let reason): await target.count(key: "reject.\(reason.rawValue)", bundleID: record.bundleID)
+            }
+        }
+    }
+
+    /// True when the spell checker knows `word` in the Settings language.
+    private static func isDictionaryWord(_ word: String, localeID: String) -> Bool {
+        NSSpellChecker.shared.checkSpelling(
+            of: word, startingAt: 0, language: localeID, wrap: false, inSpellDocumentWithTag: 0, wordCount: nil
+        ).location == NSNotFound
+    }
+
     private func handle(_ action: HotkeyStateMachine.Action) {
         switch action {
         case .start:
             targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
-            // Read the last paste's field back once, unless a paste is still on its way.
+            // Read the last paste's field back once, unless a paste is still on its way or
+            // Return already read it.
             if settings.learnFromEdits, inFlight == 0 {
                 let target = pasteTarget
-                Task.detached { await target.readBackAndCount() }
+                Task.detached { [weak self] in
+                    guard let record = await target.claim(trigger: .fn, focused: nil) else { return }
+                    let result = await target.read(record, trigger: .fn)
+                    await self?.learnFromRead(result, record: record, trigger: .fn)
+                }
             }
             startedAt = Date()
             play(startSound)
@@ -169,7 +244,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                         let target = pasteTarget
                         let generation = await target.currentGeneration
                         let pasted = result.text
-                        Task.detached { await target.capture(pasted: pasted, generation: generation) }
+                        Task.detached {
+                            await target.capture(pasted: pasted, raw: raw, historyID: entryID, generation: generation)
+                        }
                     }
                     history.append(.init(
                         id: entryID, date: Date(), raw: raw, text: result.text, app: targetApp,

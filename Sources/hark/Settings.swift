@@ -50,14 +50,22 @@ final class Settings: ObservableObject {
     /// Empty uses Apple's on-device model. The API key is in the keychain, not here.
     @Published var polishServerURL: String { didSet { defaults.set(polishServerURL, forKey: "polishServerURL") } }
     @Published var polishServerModel: String { didSet { defaults.set(polishServerModel, forKey: "polishServerModel") } }
-    /// Read the field hark pasted into back at the next dictation (Phase 1 only counts what
-    /// it finds; nothing is stored or learned yet).
+    /// Read the field hark pasted into back at Return or the next dictation (this phase only
+    /// counts what it finds; nothing is stored or learned yet).
     @Published var learnFromEdits: Bool { didSet { defaults.set(learnFromEdits, forKey: "learnFromEdits") } }
+    /// Phase A of learning from edits stores and applies nothing: this stays off until Phase
+    /// B. No window control. Set with `defaults write dev.hark.app learningActive -bool true`.
+    var learningActive: Bool { defaults.bool(forKey: "learningActive") }
+    /// Collects flag-only timing counts for the Return read-back (`probe-counts.json`).
+    /// No window control. Set with `defaults write dev.hark.app readbackProbe -bool true`.
+    var readbackProbe: Bool { defaults.bool(forKey: "readbackProbe") }
     /// How many days of history to keep; 0 keeps everything.
     @Published var keepHistoryDays: Int { didSet { defaults.set(keepHistoryDays, forKey: "keepHistoryDays") } }
 
     private init() {
-        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true, "alwaysPolish": true, "learnFromEdits": true])
+        defaults.register(defaults: ["soundsEnabled": true, "muteWhileDictating": true, "alwaysPolish": true, "learnFromEdits": true,
+            "learningActive": false, "readbackProbe": false,
+        ])
         triggerKey = TriggerKey(rawValue: defaults.string(forKey: "triggerKey") ?? "") ?? .fn
         localeID = defaults.string(forKey: "localeID") ?? Self.defaultLocaleID()
         alwaysPolish = defaults.bool(forKey: "alwaysPolish")

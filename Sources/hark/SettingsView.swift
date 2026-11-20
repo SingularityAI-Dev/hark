@@ -54,7 +54,7 @@ struct SettingsView: View {
 
             Section("Learning") {
                 Toggle("Learn from my edits", isOn: $settings.learnFromEdits)
-                Text("After you edit a dictation and dictate again, hark reads the text it pasted and learns corrected words. The text stays on this Mac.")
+                Text("After you edit a dictation, hark reads the text it pasted when you press Return or start the next dictation. The text stays on this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

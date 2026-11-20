@@ -7,7 +7,7 @@ never bundled with the app.
 
     scripts/history-report.py <history.jsonl> --clean-binary <path>
         [--current-binary <path>] [--traces polish.jsonl] [--learned learned.json]
-        [--readback readback-counts.json] [--candidates]
+        [--readback readback-counts.json] [--probe probe-counts.json] [--candidates]
 
 --clean-binary is the pinned pre-Phase-1 build, so the rules-path count stays comparable
 over time. --current-binary is today's build, used for the re-cleaned `#` count and for
@@ -161,10 +161,45 @@ def report_readback(path):
     print(f"\nread-back counts since {counts.get('since')}:")
     gate = 0
     for app, outcomes in sorted(apps.items()):
-        print(f"  {app}: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items())))
+        print(f"  {app}:")
+        # Fn reads keep bare outcome names; Return reads are `enter.`; the Phase A dry run
+        # adds `would.` and `reject.`.
+        groups = [
+            ("Fn", lambda k: "." not in k),
+            ("Return", lambda k: k.startswith("enter.")),
+            ("would", lambda k: k.startswith("would.")),
+            ("reject", lambda k: k.startswith("reject.")),
+        ]
+        for label, keep in groups:
+            line = ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items()) if keep(k))
+            if line:
+                print(f"    {label}: {line}")
         if app.startswith(CHAT_APPS):
             gate += outcomes.get("changed1or2", 0)
     print(f"  step 2 gate (Chrome, Claude, WhatsApp 'changed1or2'): {gate} (needs 10)")
+
+
+def report_probe(path):
+    """One line per delay: how often the Return read worked and found the edit."""
+    with open(path, encoding="utf-8") as handle:
+        counts = json.load(handle)
+    print(f"\nreturn read-back probe since {counts.get('since')}:")
+    for app, keys in sorted(counts.get("apps", {}).items()):
+        delays = sorted({int(k.split(".")[1][:-2]) for k in keys if k.startswith("probe.")})
+        for delay in delays:
+            def get(flag):
+                return keys.get(f"probe.{delay}ms.{flag}", 0)
+            reads = get("readOk") + get("readFail")
+            if not reads:
+                continue
+            found = get("changes.0") + get("changes.1")
+            print(
+                f"  {app} {delay} ms: reads {reads}, ok {get('readOk')}, "
+                f"paste found (0 or 1 change) {found} ({found * 100 // reads}%), "
+                f"changes 0/1/2+ {get('changes.0')}/{get('changes.1')}/{get('changes.2plus')}, "
+                f"last on screen {get('lastOnScreen')}, border glyphs {get('borderGlyphs')}, "
+                f"len <500 {get('len.0to500')} / <=2000 {get('len.500to2000')}"
+            )
 
 
 def report_learned(path, entries, traces):
@@ -233,6 +268,7 @@ def main():
     parser.add_argument("--traces")
     parser.add_argument("--learned")
     parser.add_argument("--readback")
+    parser.add_argument("--probe")
     parser.add_argument("--candidates", action="store_true")
     parser.add_argument("--dictionary", default="", help="comma-separated Dictionary terms")
     args = parser.parse_args()
@@ -249,6 +285,8 @@ def main():
         report_traces(entries, traces)
     if args.readback:
         report_readback(args.readback)
+    if args.probe:
+        report_probe(args.probe)
     if args.learned:
         report_learned(args.learned, entries, traces)
     if args.current_binary:
