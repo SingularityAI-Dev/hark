@@ -116,13 +116,34 @@ public enum TextCleaner {
 
     /// Words that mark a take-back or a spoken formatting instruction ("one word", "capital
     /// S", "all caps", "spelled"); either can legitimately shrink a dictation a great deal.
-    private static let correctionCues: Set<String> = [
+    static let correctionCues: Set<String> = [
         "wait", "sorry", "no", "actually", "mean", "scratch", "rather", "correction",
         "word", "capital", "caps", "lowercase", "uppercase", "spelled", "spelt", "hyphenated",
     ]
 
     private static func takesSomethingBack(_ text: String) -> Bool {
         vocabulary(text).contains { correctionCues.contains($0) }
+    }
+
+    private static let wholeFiller = regex(#"^#?(?:u+h+m*|u+m+|e+r+m*|h+m+|m+h+m+|a+h+m*)$"#)
+
+    /// A single word that is only hesitation ("um", "#ah", "hmm") or the filler "like".
+    static func isFiller(_ word: String) -> Bool {
+        let word = word.trimmingCharacters(in: .punctuationCharacters.subtracting(["#"]))
+        if word.lowercased() == "like" { return true }
+        return wholeFiller.firstMatch(in: word, range: NSRange(word.startIndex..., in: word)) != nil
+    }
+
+    /// The speaker's words, plus every run of two or three of them joined up, so "single
+    /// source, one word" written as "singlesource" still counts as the speaker's own.
+    static func spokenWords(_ text: String) -> Set<String> {
+        let words = vocabulary(text)
+        var spoken = Set(words)
+        for (index, word) in words.enumerated() {
+            if index + 1 < words.count { spoken.insert(word + words[index + 1]) }
+            if index + 2 < words.count { spoken.insert(word + words[index + 1] + words[index + 2]) }
+        }
+        return spoken
     }
 
     static func vocabulary(_ text: String) -> [String] {
@@ -136,25 +157,26 @@ public enum TextCleaner {
     /// the same length or shorter and built almost entirely from the speaker's own words.
     /// The model also repairs misheard words, so up to about a third of the words may be new.
     public static func isPlausibleRefinement(original: String, refined: String) -> Bool {
+        plausibilityFailure(original: original, refined: refined) == nil
+    }
+
+    /// Why a refinement fails the plausibility guard, or nil when it passes. The reasons are
+    /// fixed strings so they can be counted in traces: "empty", "too short", "too long",
+    /// "too few spoken words".
+    public static func plausibilityFailure(original: String, refined: String) -> String? {
         let before = wordCount(original)
         let after = wordCount(refined)
-        guard after > 0 else { return false }
+        guard after > 0 else { return "empty" }
         // Taking things back ("wait, sorry, it's the other one") can legitimately shrink a
         // dictation to a fraction of its length; without that, a big shrink is a summary.
         let shrinkLimit = takesSomethingBack(original) ? 0.15 : 0.35
-        guard Double(after) >= Double(before) * shrinkLimit, after <= before + max(3, before / 4) else { return false }
+        guard Double(after) >= Double(before) * shrinkLimit else { return "too short" }
+        guard after <= before + max(3, before / 4) else { return "too long" }
 
-        let spokenWords = vocabulary(original)
-        var spoken = Set(spokenWords)
-        // "single source, one word" becomes "singlesource": a run of two or three spoken
-        // words joined up still counts as the speaker's own.
-        for (index, word) in spokenWords.enumerated() {
-            if index + 1 < spokenWords.count { spoken.insert(word + spokenWords[index + 1]) }
-            if index + 2 < spokenWords.count { spoken.insert(word + spokenWords[index + 1] + spokenWords[index + 2]) }
-        }
+        let spoken = spokenWords(original)
         let written = vocabulary(refined)
-        guard !written.isEmpty else { return false }
+        guard !written.isEmpty else { return "empty" }
         let kept = written.filter { spoken.contains($0) }.count
-        return Double(kept) / Double(written.count) >= 0.65
+        return Double(kept) / Double(written.count) >= 0.65 ? nil : "too few spoken words"
     }
 }

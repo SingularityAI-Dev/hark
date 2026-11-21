@@ -8,6 +8,9 @@ final class HotkeyMonitor {
     var onAction: (@MainActor (HotkeyStateMachine.Action) -> Void)?
     var onPasteLast: (@MainActor () -> Void)?
     var onPolishRequested: (@MainActor () -> Void)?
+    /// Return or keypad Enter with no modifier held. Must return at once: the tap is switched
+    /// off by macOS when it is slow.
+    var onReturn: (@MainActor () -> Void)?
     /// Set when Shift is pressed during a recording; cleared when the next one starts.
     private(set) var polishRequested = false
     var trigger: TriggerKey = .fn
@@ -20,6 +23,7 @@ final class HotkeyMonitor {
     private static let lockKey: CGKeyCode = 49  // Space
     private static let cancelKey: CGKeyCode = 53  // Escape
     private static let pasteKey: CGKeyCode = 9  // V
+    private static let returnKeys: Set<CGKeyCode> = [36, 76]  // Return, keypad Enter
     private static let shiftKeys: Set<CGKeyCode> = [56, 60]
 
     var isRunning: Bool { tap != nil }
@@ -81,6 +85,11 @@ final class HotkeyMonitor {
             if keyCode == Self.pasteKey, modifiers == [.maskCommand, .maskControl] {
                 MainActor.assumeIsolated { onPasteLast?() }
                 return true
+            }
+            if Self.returnKeys.contains(keyCode), modifiers.isEmpty {
+                // Reported, then handled like any other key below (a Return during
+                // hold-to-talk still reaches the state machine).
+                MainActor.assumeIsolated { onReturn?() }
             }
             guard machine.isRecording else { return false }
             if keyCode == Self.cancelKey {

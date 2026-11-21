@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let indicator = IndicatorPanel()
     private let history = HistoryStore()
     private let muter = OutputMuter()
+    private let pasteTarget = PasteTarget()
     /// Timings and outcomes only, never what was said. Read with:
     /// log show --last 5m --predicate 'subsystem == "dev.hark.app"'
     private let log = Logger(subsystem: "dev.hark.app", category: "dictation")
@@ -30,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var permissionTimer: Timer?
     private var muteWork: DispatchWorkItem?
     private var subscriptions: Set<AnyCancellable> = []
+    /// Dictations finished but not yet pasted. Read-back waits until this is zero, so it
+    /// never reads a field while another paste may be landing in it.
+    private var inFlight = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setIcon(recording: false)
@@ -40,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         hotkeys.trigger = settings.triggerKey
         hotkeys.onAction = { [weak self] action in self?.handle(action) }
         hotkeys.onPasteLast = { [weak self] in self?.pasteLast() }
+        hotkeys.onReturn = { [weak self] in self?.returnPressed() }
         hotkeys.onPolishRequested = { [weak self] in
             guard let self else { return }
             indicator.model.polish = !settings.alwaysPolish
@@ -50,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
         startHotkeysWhenTrusted()
         Task { await transcriber.prepare(locale: settings.locale) }
+        Task { await TraceLog.shared.load() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -87,10 +93,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
+    /// Return was pressed. Only starts a task: the event tap must never wait on Accessibility.
+    private func returnPressed() {
+        guard settings.learnFromEdits, inFlight == 0 else { return }
+        let target = pasteTarget
+        let probing = settings.readbackProbe
+        Task.detached { [weak self] in
+            let focus = PasteTarget.focusedElement()
+            if probing {
+                guard let record = await target.peek(focused: focus) else { return }
+                await target.probe(record, after: [.milliseconds(100), .milliseconds(300), .milliseconds(600), .milliseconds(1000)])
+                return
+            }
+            guard let record = await target.claim(trigger: .enter, focused: focus) else { return }
+            try? await Task.sleep(for: PasteTarget.readDelay)
+            let result = await target.read(record, trigger: .enter)
+            await self?.learnFromRead(result, record: record, trigger: .enter)
+        }
+    }
+
+    /// Phase A coordinator: counts what the read-back found and runs the pair finder and the
+    /// filter as a dry run. Nothing is stored, applied or shown, and the read text is dropped
+    /// when this returns.
+    private func learnFromRead(
+        _ result: Result<PasteTarget.ReadResult, PasteTarget.Failure>, record: PasteTarget.Record,
+        trigger: PasteTarget.Trigger
+    ) async {
+        let target = pasteTarget
+        let prefix = trigger == .enter ? "enter." : ""
+        let read: PasteTarget.ReadResult
+        switch result {
+        case .failure(let failure):
+            await target.count(key: prefix + failure.outcome.rawValue, bundleID: record.bundleID)
+            return
+        case .success(let value):
+            read = value
+        }
+        let outcome: PasteTarget.Outcome
+        switch EditDiff.nearCopy(pasted: record.pasted, readBack: read.text) {
+        case .unchanged: outcome = .unchanged
+        case .changed: outcome = .changed1or2
+        case .different: outcome = .different
+        }
+        // Return in an app where it is a newline: the paste is still there untouched, so keep
+        // the record for the Fn trigger and count nothing (one count per paste).
+        if trigger == .enter, outcome == .unchanged {
+            await target.release(record)
+            return
+        }
+        await target.count(key: prefix + outcome.rawValue, bundleID: record.bundleID)
+        guard case .pairs(let pairs, let line) = EditPairs.align(pasted: record.pasted, readBack: read.text) else { return }
+        let localeID = settings.localeID
+        for pair in pairs {
+            let verdict = LearnFilter.judge(
+                pair: pair, raw: record.raw, line: line, isWord: { Self.isDictionaryWord($0, localeID: localeID) }, learned: [])
+            switch verdict {
+            case .learnNow: await target.count(key: "would.learnNow", bundleID: record.bundleID)
+            case .waitForSecond: await target.count(key: "would.wait", bundleID: record.bundleID)
+            case .reject(let reason): await target.count(key: "reject.\(reason.rawValue)", bundleID: record.bundleID)
+            }
+        }
+    }
+
+    /// True when the spell checker knows `word` in the Settings language.
+    private static func isDictionaryWord(_ word: String, localeID: String) -> Bool {
+        NSSpellChecker.shared.checkSpelling(
+            of: word, startingAt: 0, language: localeID, wrap: false, inSpellDocumentWithTag: 0, wordCount: nil
+        ).location == NSNotFound
+    }
+
     private func handle(_ action: HotkeyStateMachine.Action) {
         switch action {
         case .start:
             targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
+            // Read the last paste's field back once, unless a paste is still on its way or
+            // Return already read it.
+            if settings.learnFromEdits, inFlight == 0 {
+                let target = pasteTarget
+                Task.detached { [weak self] in
+                    guard let record = await target.claim(trigger: .fn, focused: nil) else { return }
+                    let result = await target.read(record, trigger: .fn)
+                    await self?.learnFromRead(result, record: record, trigger: .fn)
+                }
+            }
             startedAt = Date()
             play(startSound)
             setIcon(recording: true)
@@ -107,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                         inputDeviceUID: settings.inputDeviceUID.isEmpty ? nil : settings.inputDeviceUID,
                         onLevel: { level in DispatchQueue.main.async { model.level = level } })
                     recording = true
-                    log.notice("microphone on after \(Self.milliseconds(since: began)) ms")
+                    log.notice("microphone on after \(milliseconds(since: began)) ms")
                 } catch {
                     fail(error)
                 }
@@ -122,8 +207,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             unmute()
             indicator.show(.processing)
             // Shift flips the setting for this one dictation.
-            let polish = settings.alwaysPolish != hotkeys.polishRequested
+            let shiftFlipped = hotkeys.polishRequested
+            let polish = settings.alwaysPolish != shiftFlipped
+            let skip: PolishTrace.Skip? = polish ? nil : (shiftFlipped ? .shift : .settingOff)
+            let snapshot = settings.snapshot
+            inFlight += 1
             enqueue { [self] in
+                defer { inFlight -= 1 }
                 guard recording else {
                     indicator.hide()
                     return
@@ -132,21 +222,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 do {
                     let began = ContinuousClock.now
                     let raw = try await transcriber.finish()
-                    log.notice("transcribed \(raw.count) characters in \(Self.milliseconds(since: began)) ms")
+                    let transcribed = milliseconds(since: began)
+                    log.notice("transcribed \(raw.count) characters in \(transcribed) ms")
                     guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                         indicator.flash("Nothing heard", seconds: 1.5)
                         return
                     }
-                    let text = await Refiner.refine(
-                        TextCleaner.apply(settings.corrections, to: raw),
-                        dictionary: settings.dictionary, useModel: polish)
-                    guard !text.isEmpty else {
+                    let entryID = UUID()
+                    var result = await Dictation.process(
+                        raw: raw, entryID: entryID, snapshot: snapshot, server: PolishServer.from(snapshot),
+                        skip: skip, shiftFlipped: shiftFlipped,
+                        sink: { line in Task { await TraceLog.shared.appendLate(line) } })
+                    result.trace.transcribeMilliseconds = transcribed
+                    guard !result.text.isEmpty else {
                         indicator.hide()
                         return
                     }
-                    Inserter.paste(text)
+                    Inserter.paste(result.text)
+                    await TraceLog.shared.append(result.trace)
+                    if settings.learnFromEdits {
+                        let target = pasteTarget
+                        let generation = await target.currentGeneration
+                        let pasted = result.text
+                        Task.detached {
+                            await target.capture(pasted: pasted, raw: raw, historyID: entryID, generation: generation)
+                        }
+                    }
                     history.append(.init(
-                        date: Date(), raw: raw, text: text, app: targetApp,
+                        id: entryID, date: Date(), raw: raw, text: result.text, app: targetApp,
                         seconds: Date().timeIntervalSince(startedAt), spoken: spoken))
                     play(finishSound)
                     indicator.hide()
@@ -190,11 +293,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         muteWork?.cancel()
         muteWork = nil
         muter.restore()
-    }
-
-    private static func milliseconds(since start: ContinuousClock.Instant) -> Int {
-        let elapsed = ContinuousClock.now - start
-        return Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     private func pasteLast() {

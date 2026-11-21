@@ -3,3 +3,15 @@ build/
 .swiftpm/
 *.xcodeproj
 .DS_Store
+
+# Planning, design history and assistant/second-brain state stay local.
+# GitHub holds the app only.
+CLAUDE.md
+AGENTS.md
+STATUS.md
+CHANGELOG.md
+concepts_brief.md
+design_draft.md
+docs/designs/
+docs/findings.md
+research/

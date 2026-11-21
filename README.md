@@ -24,7 +24,7 @@ people; not for distribution.
 ## Why it exists
 
 Typeless does this job well, but it does it in the cloud. Studying its behaviour
-(`docs/findings.md`) showed three things worth avoiding:
+showed three things worth avoiding:
 
 **Your words leave the Mac.** Speech, cleanup, and context from the screen and the
 surrounding text are sent to its servers.
@@ -287,7 +287,6 @@ Layout:
   dictation stats and the activity grid), unit tested.
 - `Sources/hark`: the app (event tap, audio capture, Apple speech, cleanup model, paste,
   indicator, settings, history, the hark window).
-- `docs/findings.md`: what was learned from studying Typeless and what hark does instead.
 
 **Stack:** Swift 6.2 toolchain, SwiftPM, AppKit, SwiftUI for settings and the indicator, Apple `Speech`
 (`SpeechAnalyzer`, `SpeechTranscriber`) and `FoundationModels`. No third-party packages.
