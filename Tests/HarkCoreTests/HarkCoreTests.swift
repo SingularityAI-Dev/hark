@@ -603,8 +603,8 @@ import Testing
 @Suite struct ScreenTailTests {
     @Test func paddingIsSqueezedSoMoreRowsFit() {
         let row = "line" + String(repeating: " ", count: 180)
-        let text = String(repeating: row + "\n", count: 40) + "Ask Ruan to send it."
-        #expect(EditPairs.screenTail(text, limit: 2000).contains("Ask Ruan to send it."))
+        let text = String(repeating: row + "\n", count: 40) + "Ask Ruen to send it."
+        #expect(EditPairs.screenTail(text, limit: 2000).contains("Ask Ruen to send it."))
         #expect(EditPairs.screenTail(text, limit: 2000).components(separatedBy: "line").count > 30)
     }
 
