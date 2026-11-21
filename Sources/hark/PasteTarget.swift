@@ -59,6 +59,8 @@ actor PasteTarget {
     static let readDelay: Duration = .milliseconds(300)
     /// How much of the end of the field a Return read takes (UTF-16 units).
     static let tailLength = 2000
+    /// How much more than `tailLength` a Return read fetches before squeezing row padding.
+    static let screenReadFactor = 12
     private static let textRoles: Set<String> = [
         kAXTextAreaRole as String, kAXTextFieldRole as String, kAXComboBoxRole as String, "AXSearchField",
     ]
@@ -264,12 +266,15 @@ actor PasteTarget {
         case .enter:
             // After Return the app may clear its input box and move the caret, so take the
             // end of the field instead of a window around the old caret.
-            start = max(0, count - tailLength)
+            // A wide terminal pads every row with spaces, so 2000 raw units can be ten rows.
+            // Read more and squeeze the padding out before keeping the last 2000.
+            start = max(0, count - tailLength * screenReadFactor)
             end = count
         }
         guard end > start else { return .failure(Failure(outcome: .different)) }
         do {
-            return .success(try text(record.element, location: start, length: end - start, allowWholeValue: trigger == .fn))
+            let raw = try text(record.element, location: start, length: end - start, allowWholeValue: trigger == .fn)
+            return .success(trigger == .enter ? EditPairs.screenTail(raw, limit: tailLength) : raw)
         } catch let failure as Failure {
             return .failure(failure)
         } catch {

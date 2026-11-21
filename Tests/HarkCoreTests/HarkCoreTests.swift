@@ -599,3 +599,20 @@ import Testing
         #expect(EditDiff.wordsAfterBestStretch(pasted: "send the forms", readBack: "") == nil)
     }
 }
+
+@Suite struct ScreenTailTests {
+    @Test func paddingIsSqueezedSoMoreRowsFit() {
+        let row = "line" + String(repeating: " ", count: 180)
+        let text = String(repeating: row + "\n", count: 40) + "Ask Ruan to send it."
+        #expect(EditPairs.screenTail(text, limit: 2000).contains("Ask Ruan to send it."))
+        #expect(EditPairs.screenTail(text, limit: 2000).components(separatedBy: "line").count > 30)
+    }
+
+    @Test func shortTextIsKeptWhole() {
+        #expect(EditPairs.screenTail("a   b  c", limit: 2000) == "a b c")
+    }
+
+    @Test func tailKeepsTheEnd() {
+        #expect(EditPairs.screenTail("abcdef", limit: 3) == "def")
+    }
+}

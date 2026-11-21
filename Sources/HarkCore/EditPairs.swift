@@ -71,6 +71,22 @@ public enum EditPairs {
         return result(for: best, pattern: pattern, rows: rows)
     }
 
+    /// The last `limit` UTF-16 units of a screen read after each run of spaces or tabs is
+    /// squeezed to one space, so a wide, space-padded terminal does not use up the limit.
+    public static func screenTail(_ text: String, limit: Int) -> String {
+        var squeezed = ""
+        squeezed.reserveCapacity(text.utf8.count)
+        var lastWasBlank = false
+        for character in text {
+            let blank = character == " " || character == "\t"
+            if blank && lastWasBlank { continue }
+            squeezed.append(character)
+            lastWasBlank = blank
+        }
+        guard squeezed.utf16.count > limit else { return squeezed }
+        return String(squeezed.suffix(limit))
+    }
+
     // MARK: Tokens
 
     private static let trimmed = CharacterSet.punctuationCharacters.union(.symbols)
